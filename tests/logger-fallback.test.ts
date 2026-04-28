@@ -1,8 +1,14 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const FALLBACK_USER_DATA_DIR = path.join(process.cwd(), '.cowork-user-data');
+const FALLBACK_USER_DATA_DIR =
+  process.platform === 'darwin'
+    ? path.join(os.homedir(), 'Library', 'Application Support', 'open-cowork')
+    : process.platform === 'win32'
+      ? path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'open-cowork')
+      : path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'open-cowork');
 const FALLBACK_LOGS_DIR = path.join(FALLBACK_USER_DATA_DIR, 'logs');
 
 describe('logger fallback behavior', () => {
