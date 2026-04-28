@@ -11,7 +11,6 @@
 <p align="center">
   <a href="./README_zh.md">中文文档</a> •
   <a href="#features">Features</a> •
-  <a href="#demo">Demo</a> •
   <a href="#installation">Downloads</a> •
   <a href="#quick-start">Quick Start</a> •
   <a href="#skills">Skills Library</a>
@@ -21,8 +20,6 @@
   <img src="https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-blue" alt="Platform" />
   <img src="https://img.shields.io/badge/License-MIT-green" alt="License" />
   <img src="https://img.shields.io/badge/Node.js-18+-brightgreen" alt="Node.js" />
-  <a href="https://discord.gg/pynjtQDf"><img src="https://img.shields.io/discord/1493588403260883078?logo=discord&label=Discord&color=5865F2" alt="Discord" /></a>
-  <a href="#community"><img src="https://img.shields.io/badge/WeChat-微信群-07C160?logo=wechat&logoColor=white" alt="WeChat" /></a>
 </p>
 
 ---
@@ -46,12 +43,6 @@ It provides a sandboxed workspace where AI can manage files, generate profession
 
 ## ✨ Key Features
 
-|               | MCP & Skills | Remote Control | GUI Operation |
-| ------------- | ------------ | -------------- | ------------- |
-| Standard Coding Agent | ✓      | ✗              | ✗             |
-| Remote-First Agent    | ✓      | ✓              | ✗             |
-| 清砚雪Coding | ✓            | ✓              | ✓             |
-
 - **One-Click Install, Ready to Use**: Pre-built installers for Windows, macOS, and Linux, no environment setup needed—just download and start using.
 - **Flexible Model Support**: Supports **Claude**, **OpenAI-compatible APIs**, and Chinese models like **GLM**, **MiniMax**, **Kimi**. Use your OpenRouter, Anthropic, or other API keys with flexible configuration. More models coming soon!
 - **Remote Control**: Connect to collaboration platforms like **Feishu (Lark)** and other remote services to automate workflows and cross-platform operations.
@@ -64,32 +55,6 @@ It provides a sandboxed workspace where AI can manage files, generate profession
 - **Secure Workspace**: All operations confined to your chosen workspace folder.
 - **VM-Level Isolation**: WSL2 (Windows) and Lima (macOS) VM isolation—all commands execute in an isolated VM to protect your host system.
 - **UI Enhancements**: Beautiful and flexible UI design, system language switching, comprehensive MCP/Skills/Tools call display.
-
-<a id="demo"></a>
-
-## 🎬 Demo
-
-See 清砚雪Coding in action:
-
-### 1. Folder Organization & Cleanup 📂
-
-https://github.com/user-attachments/assets/dbeb0337-2d19-4b5d-a438-5220f2a87ca7
-
-### 2. Generate PPT from Files 📊
-
-https://github.com/user-attachments/assets/30299ded-0260-468f-b11d-d282bb9c97f2
-
-### 3. Generate XLSX Spreadsheets 📉
-
-https://github.com/user-attachments/assets/f57b9106-4b2c-4747-aecd-a07f78af5dfc
-
-### 4. GUI Operation🖥
-
-https://github.com/user-attachments/assets/75542c76-210f-414d-8182-1da988c148f2
-
-### 5. Remote control with Feishu(Lark) 🤖
-
-https://github.com/user-attachments/assets/05a703de-c0f5-407b-9a43-18b6a172fd74
 
 ---
 

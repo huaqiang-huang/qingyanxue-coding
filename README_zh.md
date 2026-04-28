@@ -11,7 +11,6 @@
 <p align="center">
   <a href="./README.md">English Docs</a> •
   <a href="#核心特性">核心特性</a> •
-  <a href="#演示">演示视频</a> •
   <a href="#下载与安装">下载安装</a> •
   <a href="#快速开始">快速开始</a> •
   <a href="#技能库">技能库</a>
@@ -21,8 +20,6 @@
   <img src="https://img.shields.io/badge/平台-Windows%20%7C%20macOS%20%7C%20Linux-blue" alt="Platform" />
   <img src="https://img.shields.io/badge/协议-MIT-green" alt="License" />
   <img src="https://img.shields.io/badge/Node.js-18+-brightgreen" alt="Node.js" />
-  <a href="https://discord.gg/pynjtQDf"><img src="https://img.shields.io/discord/1493588403260883078?logo=discord&label=Discord&color=5865F2" alt="Discord" /></a>
-  <a href="#加入社群"><img src="https://img.shields.io/badge/WeChat-微信群-07C160?logo=wechat&logoColor=white" alt="WeChat" /></a>
 </p>
 
 ---
@@ -46,12 +43,6 @@
 
 ## ✨ 核心特性
 
-|               | MCP & Skills | 远程控制 | 图形界面操作 |
-| ------------- | ------------ | -------- | ------------ |
-| 标准 Coding Agent | ✓        | ✗        | ✗            |
-| 远程协作型 Agent  | ✓        | ✓        | ✗            |
-| 清砚雪Coding  | ✓            | ✓        | ✓            |
-
 - **一键安装，开箱即用**：提供 Windows、macOS 和 Linux 预构建安装包，无需配置环境，下载即可开始使用。
 - **灵活模型支持**：支持 **Claude**、**OpenAI 兼容接口**，以及国产大模型 **GLM**、**MiniMax**、**Kimi** 等。使用你的 OpenRouter、Anthropic等API Key，灵活配置。更多模型持续接入中！
 - **远程控制**：可以接入**飞书**等协作平台和远程服务，实现工作流自动化和跨平台操作。
@@ -64,24 +55,6 @@
 - **安全可控的工作环境**：所有操作限制在你选择的工作区文件夹内。
 - **虚拟机级别安全隔离**：基于 WSL2 (Windows) 和 Lima (macOS) 的虚拟机隔离，所有命令在隔离的虚拟机中执行，保障宿主机安全。
 - **UI优化**：灵活优美的UI设计、切换系统语言、完善的MCP/Skills/Tools调用展示。
-
-<a id="演示"></a>
-
-## 🎬 演示
-
-观看 清砚雪Coding 实战演示 ：
-
-### 1. 文件夹收纳整理 📂
-
-https://github.com/user-attachments/assets/dbeb0337-2d19-4b5d-a438-5220f2a87ca7
-
-### 2. 从文件生成 PPT 📊
-
-https://github.com/user-attachments/assets/30299ded-0260-468f-b11d-d282bb9c97f2
-
-### 3. 从文件生成 XLSX 表格 📉
-
-https://github.com/user-attachments/assets/f57b9106-4b2c-4747-aecd-a07f78af5dfc
 
 ---
 
