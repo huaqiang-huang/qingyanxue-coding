@@ -69,7 +69,7 @@ class MCPConfigStore {
     const storeCwd = getOpenCoworkAppDataDir();
     const storeOptions: StoreOptions<{ servers: MCPServerConfig[] }> & { projectName?: string } = {
       name: 'mcp-config',
-      projectName: 'open-cowork',
+      projectName: 'qingyanxue-coding',
       cwd: storeCwd,
       defaults: {
         servers: [],

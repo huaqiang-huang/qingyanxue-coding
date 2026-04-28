@@ -11,7 +11,7 @@
 
 **Please do not open a public GitHub issue for security vulnerabilities.**
 
-Report security issues by emailing **security@opencowork.ai** (or the maintainer contact listed in the repository). Include:
+Report security issues through the maintainer contact or private security disclosure path listed in [huaqiang-huang/qingyanxue-coding](https://github.com/huaqiang-huang/qingyanxue-coding). Include:
 
 - A clear description of the vulnerability
 - Steps to reproduce or a proof-of-concept

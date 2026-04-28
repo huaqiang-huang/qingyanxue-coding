@@ -159,5 +159,5 @@ extraMetadata:
 
 publish:
   provider: github
-  owner: OpenCoworkAI
-  repo: open-cowork
+  owner: huaqiang-huang
+  repo: qingyanxue-coding

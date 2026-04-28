@@ -34,9 +34,17 @@ class RemoteConfigStore {
         unknown
       >;
     this.store = createEncryptedStoreWithKeyRotation<RemoteConfigRecord>({
-      stableKey: 'open-cowork-remote-stable-v1',
+      stableKey: 'qingyanxue-coding-remote-stable-v1',
       legacyKeys: [
+        'open-cowork-remote-stable-v1',
         'open-cowork-remote-v1',
+        'qingyanxue-coding-remote-v1',
+        ...getLegacyDerivedKeyHexes({
+          moduleDirname: __dirname,
+          stableSeed: 'qingyanxue-coding-remote-stable-v1',
+          legacySeed: 'qingyanxue-coding-remote-v1',
+          salt: 'qingyanxue-coding-remote-salt',
+        }),
         ...getLegacyDerivedKeyHexes({
           moduleDirname: __dirname,
           stableSeed: 'open-cowork-remote-stable-v1',
@@ -46,7 +54,7 @@ class RemoteConfigStore {
       ],
       storeOptions: {
         name: 'remote-config',
-        projectName: 'open-cowork',
+        projectName: 'qingyanxue-coding',
         cwd: storeCwd,
         defaults: {
           ...DEFAULT_REMOTE_CONFIG,

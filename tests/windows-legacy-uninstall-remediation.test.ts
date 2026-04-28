@@ -10,7 +10,7 @@ describe('windows legacy uninstall remediation', () => {
     expect(builderConfig).toContain('include: installer.nsh');
     expect(installerInclude).toContain('!macro customUnInstallCheck');
     expect(installerInclude).toContain('Open-Cowork-Legacy-Cleanup.cmd');
-    expect(installerInclude).toContain('$LOCALAPPDATA\\Programs\\Open Cowork');
+    expect(installerInclude).toContain('$LOCALAPPDATA\\Programs\\清砚雪Coding');
   });
 
   it('closes long-lived resources during quit cleanup', () => {

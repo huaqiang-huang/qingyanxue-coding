@@ -392,7 +392,7 @@ export class ConfigStore {
   constructor() {
     const storeOptions: StoreOptions<AppConfig> & { projectName?: string } = {
       name: 'config',
-      projectName: 'open-cowork',
+      projectName: 'qingyanxue-coding',
       cwd: resolveStoreCwd(),
       defaults: defaultConfig,
     };
@@ -401,9 +401,17 @@ export class ConfigStore {
     // AppConfig is a structurally compatible object type at runtime.
     type AppConfigRecord = AppConfig & Record<string, unknown>;
     this.store = createEncryptedStoreWithKeyRotation<AppConfigRecord>({
-      stableKey: 'open-cowork-config-stable-v1',
+      stableKey: 'qingyanxue-coding-config-stable-v1',
       legacyKeys: [
+        'open-cowork-config-stable-v1',
         'open-cowork-config-v1',
+        'qingyanxue-coding-config-v1',
+        ...getLegacyDerivedKeyHexes({
+          moduleDirname: __dirname,
+          stableSeed: 'qingyanxue-coding-config-stable-v1',
+          legacySeed: 'qingyanxue-coding-config-v1',
+          salt: 'qingyanxue-coding-config-salt',
+        }),
         ...getLegacyDerivedKeyHexes({
           moduleDirname: __dirname,
           stableSeed: 'open-cowork-config-stable-v1',
@@ -1409,6 +1417,7 @@ export class ConfigStore {
     delete process.env.GEMINI_API_KEY;
     delete process.env.GEMINI_BASE_URL;
     delete process.env.CLAUDE_CODE_PATH;
+    delete process.env.QINGYANXUE_CODING_WORKDIR;
     delete process.env.COWORK_WORKDIR;
 
     const useOpenAI =
@@ -1499,6 +1508,7 @@ export class ConfigStore {
     // claudeCodePath is no longer used (pi-coding-agent handles model routing natively)
 
     if (projectedConfig.defaultWorkdir) {
+      process.env.QINGYANXUE_CODING_WORKDIR = projectedConfig.defaultWorkdir;
       process.env.COWORK_WORKDIR = projectedConfig.defaultWorkdir;
     }
 

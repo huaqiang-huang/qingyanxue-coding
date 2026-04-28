@@ -237,7 +237,7 @@ export class MCPManager {
       );
       if (!preferredNpxPath) {
         throw new Error(
-          'npx is not available. Install Node.js so Open Cowork can use your system npx.cmd, or reinstall the app to restore the bundled runtime.'
+          'npx is not available. Install Node.js so 清砚雪Coding can use your system npx.cmd, or reinstall the app to restore the bundled runtime.'
         );
       }
 
@@ -882,7 +882,7 @@ export class MCPManager {
     // Create MCP client
     const client = new Client(
       {
-        name: 'open-cowork',
+        name: 'qingyanxue-coding',
         version: '0.1.0',
       },
       {

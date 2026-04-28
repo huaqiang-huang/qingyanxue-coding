@@ -14,7 +14,7 @@ class PluginRegistryStore {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- electron-store requires Record<string, any>
     const storeOptions: any = {
       name: 'plugin-registry',
-      projectName: 'open-cowork',
+      projectName: 'qingyanxue-coding',
       cwd: storeCwd,
       defaults: {
         plugins: [],

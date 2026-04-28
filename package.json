@@ -1,7 +1,7 @@
 {
-  "name": "open-cowork",
+  "name": "qingyanxue-coding",
   "version": "3.3.0",
-  "description": "Open-source AI agent desktop app for Windows & macOS — one-click install Claude Code, MCP tools, and Skills with sandbox isolation and multi-model support",
+  "description": "Codex-style AI coding agent desktop app for Windows, macOS, and Linux with one-click install, MCP tools, Skills, sandbox isolation, and multi-model support",
   "keywords": [
     "ai-agent",
     "claude",
@@ -24,13 +24,13 @@
     "slack",
     "multi-model"
   ],
-  "homepage": "https://github.com/OpenCoworkAI/open-cowork",
+  "homepage": "https://github.com/huaqiang-huang/qingyanxue-coding",
   "repository": {
     "type": "git",
-    "url": "https://github.com/OpenCoworkAI/open-cowork.git"
+    "url": "https://github.com/huaqiang-huang/qingyanxue-coding.git"
   },
   "bugs": {
-    "url": "https://github.com/OpenCoworkAI/open-cowork/issues"
+    "url": "https://github.com/huaqiang-huang/qingyanxue-coding/issues"
   },
   "engines": {
     "node": ">=22"

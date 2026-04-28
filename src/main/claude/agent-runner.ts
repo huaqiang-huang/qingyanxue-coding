@@ -691,7 +691,7 @@ ${hints.join('\n')}
 
         const targetExists = fs.existsSync(targetPath);
         const pointsToLegacyBundle =
-          /\/Applications\/Open Cowork\.app\//.test(linkTarget) ||
+          /\/Applications\/清砚雪Coding\.app\//.test(linkTarget) ||
           /\/Applications\/清砚雪Coding\.app\//.test(linkTarget);
 
         if (!targetExists || pointsToLegacyBundle) {
@@ -1811,7 +1811,7 @@ This is an isolated sandbox environment. Use ${VIRTUAL_WORKSPACE_PATH} as the ro
             : '';
 
       const coworkAppendPrompt = [
-        'You are the coding-first Open Cowork assistant. Behave like a decisive software engineering agent: concise, execution-oriented, and strong with tools.',
+        'You are the coding-first 清砚雪Coding assistant. Behave like a decisive software engineering agent: concise, execution-oriented, and strong with tools.',
         `CRITICAL BEHAVIORAL RULES:
 1. CHAT FIRST only for purely conceptual questions; for implementation, debugging, refactoring, repo exploration, environment diagnosis, or project work, assume the user wants you to actively do the work instead of only discussing it.
 2. For actionable coding tasks, proceed immediately with reasonable assumptions. Gather the minimum context, use tools, make progress, and report only the essential outcome. Do not restate the task or ask for confirmation unless a risky decision blocks execution.

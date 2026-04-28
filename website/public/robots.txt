@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://opencoworkai.github.io/open-cowork/sitemap.xml
+Sitemap: https://opencoworkai.github.io/qingyanxue-coding/sitemap.xml

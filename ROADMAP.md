@@ -1,6 +1,6 @@
-# 🗺️ Open Cowork Roadmap
+# 🗺️ 清砚雪Coding Roadmap
 
-> This document outlines the development direction for Open Cowork. For feature requests and discussion, see [GitHub Issues](https://github.com/OpenCoworkAI/open-cowork/issues).
+> This document outlines the development direction for 清砚雪Coding. For feature requests and discussion, see [GitHub Issues](https://github.com/huaqiang-huang/qingyanxue-coding/issues).
 
 ## ✅ Completed
 

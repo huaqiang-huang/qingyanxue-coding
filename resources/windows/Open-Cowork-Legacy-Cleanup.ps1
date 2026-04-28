@@ -9,7 +9,7 @@ Set-StrictMode -Version Latest
 
 function Write-Step {
   param([string]$Message)
-  Write-Host "[Open Cowork Cleanup] $Message"
+  Write-Host "[清砚雪Coding Cleanup] $Message"
 }
 
 function Add-UniquePath {
@@ -65,7 +65,7 @@ function Get-OpenCoworkRegistryEntries {
     }
 
     $items = Get-ItemProperty -Path $glob -ErrorAction SilentlyContinue | Where-Object {
-      $_.DisplayName -like "Open Cowork*" -or $_.Publisher -eq "Open Cowork Team"
+      $_.DisplayName -like "清砚雪Coding*" -or $_.Publisher -eq "清砚雪Coding Team"
     }
 
     if ($items) {
@@ -78,11 +78,11 @@ function Get-OpenCoworkRegistryEntries {
 
 function Stop-OpenCoworkProcesses {
   $processes = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
-    $_.Name -ieq "Open Cowork.exe" -or $_.ExecutablePath -like "*\Open Cowork.exe"
+    $_.Name -ieq "清砚雪Coding.exe" -or $_.ExecutablePath -like "*\清砚雪Coding.exe"
   })
 
   if ($processes.Count -eq 0) {
-    Write-Step "No running Open Cowork processes found."
+    Write-Step "No running 清砚雪Coding processes found."
     return
   }
 
@@ -113,16 +113,16 @@ foreach ($entry in $registryEntries) {
   }
 }
 
-Add-UniquePath -List $installPaths -PathValue (Join-Path $env:LOCALAPPDATA "Programs\Open Cowork")
+Add-UniquePath -List $installPaths -PathValue (Join-Path $env:LOCALAPPDATA "Programs\清砚雪Coding")
 
 $appDataPaths = [System.Collections.Generic.List[string]]::new()
-Add-UniquePath -List $appDataPaths -PathValue (Join-Path $env:APPDATA "Open Cowork")
-Add-UniquePath -List $appDataPaths -PathValue (Join-Path $env:APPDATA "open-cowork")
-Add-UniquePath -List $appDataPaths -PathValue (Join-Path $env:LOCALAPPDATA "Open Cowork")
-Add-UniquePath -List $appDataPaths -PathValue (Join-Path $env:LOCALAPPDATA "open-cowork")
+Add-UniquePath -List $appDataPaths -PathValue (Join-Path $env:APPDATA "清砚雪Coding")
+Add-UniquePath -List $appDataPaths -PathValue (Join-Path $env:APPDATA "qingyanxue-coding")
+Add-UniquePath -List $appDataPaths -PathValue (Join-Path $env:LOCALAPPDATA "清砚雪Coding")
+Add-UniquePath -List $appDataPaths -PathValue (Join-Path $env:LOCALAPPDATA "qingyanxue-coding")
 
 Write-Host ""
-Write-Step "This tool removes broken Open Cowork Windows install leftovers."
+Write-Step "This tool removes broken 清砚雪Coding Windows install leftovers."
 Write-Step "Install directories and uninstall registry entries will be removed."
 if ($RemoveAppData) {
   Write-Step "AppData cleanup is enabled. Local settings and cached data will also be removed."
@@ -189,7 +189,7 @@ if ($RemoveAppData) {
 
 Write-Host ""
 if ($failures.Count -eq 0) {
-  Write-Step "Cleanup finished. You can rerun the Open Cowork installer now."
+  Write-Step "Cleanup finished. You can rerun the 清砚雪Coding installer now."
   if (-not $RemoveAppData) {
     Write-Step "If you also want to reset local settings, rerun this tool with -RemoveAppData."
   }

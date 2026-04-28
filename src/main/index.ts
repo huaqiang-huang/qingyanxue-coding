@@ -92,6 +92,7 @@ const userDataOverride = getOpenCoworkUserDataOverride();
 if (userDataOverride) {
   fs.mkdirSync(userDataOverride, { recursive: true });
   app.setPath('userData', userDataOverride);
+  process.env.QINGYANXUE_CODING_USER_DATA_DIR = userDataOverride;
   process.env.OPEN_COWORK_USER_DATA_DIR = userDataOverride;
   log('[App] Using isolated userData override:', userDataOverride);
 }
@@ -2103,7 +2104,7 @@ ipcMain.handle('logs.export', async () => {
     // Show save dialog
     const result = await dialog.showSaveDialog(mainWindow!, {
       title: 'Export Logs',
-      defaultPath: `opencowork-logs-${new Date().toISOString().split('T')[0]}.zip`,
+      defaultPath: `qingyanxue-coding-logs-${new Date().toISOString().split('T')[0]}.zip`,
       filters: [
         { name: 'ZIP Archive', extensions: ['zip'] },
         { name: 'All Files', extensions: ['*'] },
@@ -2180,7 +2181,7 @@ ipcMain.handle('logs.export', async () => {
       });
       archive.append(
         [
-          'Open Cowork diagnostic bundle',
+          '清砚雪Coding diagnostic bundle',
           `Exported at: ${diagnosticsSummary.exportedAt}`,
           '',
           'Included files:',

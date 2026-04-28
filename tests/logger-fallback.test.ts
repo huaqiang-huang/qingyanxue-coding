@@ -3,12 +3,27 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const FALLBACK_USER_DATA_DIR =
-  process.platform === 'darwin'
-    ? path.join(os.homedir(), 'Library', 'Application Support', 'open-cowork')
-    : process.platform === 'win32'
-      ? path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'open-cowork')
-      : path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config'), 'open-cowork');
+function resolveExpectedFallbackUserDataDir(): string {
+  const baseDir =
+    process.platform === 'darwin'
+      ? path.join(os.homedir(), 'Library', 'Application Support')
+      : process.platform === 'win32'
+        ? process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming')
+        : process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config');
+
+  const preferred = path.join(baseDir, 'qingyanxue-coding');
+  const legacy = path.join(baseDir, 'open-cowork');
+
+  if (fs.existsSync(preferred)) {
+    return preferred;
+  }
+  if (fs.existsSync(legacy)) {
+    return legacy;
+  }
+  return preferred;
+}
+
+const FALLBACK_USER_DATA_DIR = resolveExpectedFallbackUserDataDir();
 const FALLBACK_LOGS_DIR = path.join(FALLBACK_USER_DATA_DIR, 'logs');
 
 describe('logger fallback behavior', () => {
