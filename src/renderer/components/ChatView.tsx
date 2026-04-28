@@ -14,7 +14,7 @@ import { useAppStore } from '../store';
 import { useIPC } from '../hooks/useIPC';
 import { MessageCard } from './MessageCard';
 import type { Message, ContentBlock } from '../types';
-import { Send, Square, Plus, Loader2, Plug, X, Clock } from 'lucide-react';
+import { Send, Square, Plus, Loader2, Plug, X } from 'lucide-react';
 
 type AttachedFile = {
   name: string;
@@ -67,6 +67,19 @@ export function ChatView() {
   const pendingCount = pendingTurns.length;
   const isSessionRunning = activeSession?.status === 'running';
   const canStop = isSessionRunning || hasActiveTurn || pendingCount > 0;
+  const workspaceLabel = useMemo(() => {
+    const cwd = activeSession?.cwd?.trim();
+    if (!cwd) return 'No workspace';
+    const parts = cwd.split(/[/\\]/).filter(Boolean);
+    return parts[parts.length - 1] || cwd;
+  }, [activeSession?.cwd]);
+  const runStatusLabel = hasActiveTurn
+    ? pendingCount > 0
+      ? `Running · ${pendingCount + 1} steps`
+      : 'Running'
+    : isSessionRunning
+      ? 'Starting'
+      : 'Ready';
 
   const displayedMessages = useMemo(() => {
     if (!activeSessionId) return messages;
@@ -129,8 +142,6 @@ export function ChatView() {
     executionClock?.startAt == null
       ? 0
       : Math.max(0, (executionClock.endAt ?? clockNow) - executionClock.startAt);
-  const timerActive = Boolean(executionClock?.startAt && executionClock.endAt === null);
-
   // Debounced scroll function to prevent scroll conflicts
   const scrollToBottom = useRef((behavior: ScrollBehavior = 'auto', immediate: boolean = false) => {
     // Cancel any pending scroll requests
@@ -635,7 +646,7 @@ export function ChatView() {
         className="relative h-12 border-b border-border-muted grid grid-cols-[1fr_auto_1fr] items-center px-4 lg:px-8 bg-background/88 backdrop-blur-md"
       >
         <div className="text-[11px] font-medium tracking-[0.08em] uppercase text-text-muted">
-          Open Cowork
+          清砚雪Coding
         </div>
         <h2
           ref={titleRef}
@@ -669,6 +680,36 @@ export function ChatView() {
         )}
       </div>
 
+      <div className="border-b border-border-muted bg-background/75">
+        <div className="mx-auto flex w-full max-w-[920px] flex-wrap items-center gap-2 px-5 py-2 text-[11px] text-text-muted lg:px-8">
+          <span className="rounded-full border border-border-subtle bg-background/60 px-2.5 py-1 text-text-secondary">
+            {appConfig?.model || t('chat.noModel')}
+          </span>
+          <span className="rounded-full border border-border-subtle bg-background/60 px-2.5 py-1 text-text-secondary">
+            {workspaceLabel}
+          </span>
+          <span
+            className={`rounded-full border px-2.5 py-1 ${
+              hasActiveTurn || isSessionRunning
+                ? 'border-accent/20 bg-accent/8 text-accent'
+                : 'border-border-subtle bg-background/60 text-text-secondary'
+            }`}
+          >
+            {runStatusLabel}
+          </span>
+          {liveElapsed > 0 && (
+            <span className="rounded-full border border-border-subtle bg-background/60 px-2.5 py-1 text-text-secondary">
+              {formatExecutionTime(liveElapsed)}
+            </span>
+          )}
+          {activeConnectors.length > 0 && (
+            <span className="rounded-full border border-mcp/15 bg-mcp/8 px-2.5 py-1 text-mcp">
+              {activeConnectors.length} connector{activeConnectors.length > 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
+      </div>
+
       {/* Messages */}
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto">
         <div
@@ -678,9 +719,11 @@ export function ChatView() {
           {displayedMessages.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-28 text-text-muted space-y-3 text-center">
               <p className="text-[11px] uppercase tracking-[0.16em] text-text-muted/80">
-                Open Cowork
+                Coding-first mode
               </p>
-              <p className="text-base text-text-secondary">{t('chat.startConversation')}</p>
+              <p className="text-base text-text-secondary">
+                Ask for a fix, refactor, feature, review, or repo investigation.
+              </p>
             </div>
           ) : (
             displayedMessages.map((message) => {
@@ -703,18 +746,6 @@ export function ChatView() {
                 <span className="text-sm text-text-secondary">{t('chat.processing')}</span>
               </div>
             )}
-
-          {/* Real-time execution timer */}
-          {liveElapsed > 0 && (
-            <div className="flex items-center gap-1.5 text-[11px] text-text-muted mt-1 ml-0.5">
-              <Clock className="w-3 h-3" />
-              <span>
-                {timerActive
-                  ? formatExecutionTime(liveElapsed)
-                  : t('messageCard.executionTime', { time: formatExecutionTime(liveElapsed) })}
-              </span>
-            </div>
-          )}
 
           <div ref={messagesEndRef} />
         </div>
@@ -810,18 +841,13 @@ export function ChatView() {
                     handleSubmit();
                   }
                 }}
-                placeholder={t('chat.typeMessage')}
+                placeholder="Describe the coding task and I’ll work through it end-to-end."
                 disabled={isSubmitting}
                 rows={1}
                 className="flex-1 resize-none bg-transparent border-none outline-none text-text-primary placeholder:text-text-muted text-[15px] py-2"
               />
 
               <div className="flex items-center gap-2">
-                {/* Model display */}
-                <span className="hidden sm:inline-flex px-2.5 py-1 rounded-full border border-border-subtle bg-background/60 text-xs text-text-muted">
-                  {appConfig?.model || t('chat.noModel')}
-                </span>
-
                 {canStop && (
                   <button
                     type="button"

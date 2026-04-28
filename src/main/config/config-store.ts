@@ -30,6 +30,11 @@ import {
   shouldUseAnthropicAuthToken,
 } from './auth-utils';
 import { API_PROVIDER_PRESETS, PI_AI_CURATED_PRESETS } from '../../shared/api-model-presets';
+import { getOpenCoworkAppDataDir } from '../runtime-path-overrides';
+
+function resolveStoreCwd(): string | undefined {
+  return getOpenCoworkAppDataDir();
+}
 
 /**
  * Application configuration schema
@@ -146,7 +151,7 @@ const defaultProfiles: Record<ProviderProfileKey, ProviderProfile> = {
   openrouter: {
     apiKey: '',
     baseUrl: 'https://openrouter.ai/api/v1',
-    model: 'anthropic/claude-sonnet-4-6',
+    model: 'gpt-5.4',
   },
   anthropic: {
     apiKey: '',
@@ -187,10 +192,10 @@ const defaultProfiles: Record<ProviderProfileKey, ProviderProfile> = {
 
 const defaultConfigSet: ApiConfigSet = {
   id: DEFAULT_CONFIG_SET_ID,
-  name: '默认方案',
+  name: 'GPT-5.4 Coding',
   isSystem: true,
   provider: 'openrouter',
-  customProtocol: 'anthropic',
+  customProtocol: 'openai',
   activeProfileKey: 'openrouter',
   profiles: defaultProfiles,
   enableThinking: false,
@@ -388,6 +393,7 @@ export class ConfigStore {
     const storeOptions: StoreOptions<AppConfig> & { projectName?: string } = {
       name: 'config',
       projectName: 'open-cowork',
+      cwd: resolveStoreCwd(),
       defaults: defaultConfig,
     };
 

@@ -5,6 +5,7 @@ import * as crypto from 'crypto';
 import path from 'path';
 import type { MCPServerConfig } from './mcp-manager';
 import { log, logError } from '../utils/logger';
+import { getOpenCoworkAppDataDir } from '../runtime-path-overrides';
 
 /**
  * Preset MCP Server Configurations
@@ -65,9 +66,11 @@ class MCPConfigStore {
   private store: Store<{ servers: MCPServerConfig[] }>;
 
   constructor() {
+    const storeCwd = getOpenCoworkAppDataDir();
     const storeOptions: StoreOptions<{ servers: MCPServerConfig[] }> & { projectName?: string } = {
       name: 'mcp-config',
       projectName: 'open-cowork',
+      cwd: storeCwd,
       defaults: {
         servers: [],
       },

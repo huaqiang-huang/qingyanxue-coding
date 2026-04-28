@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useIPC } from '../hooks/useIPC';
 import type { PermissionRequest } from '../types';
 import { Shield, X, Check, AlertTriangle } from 'lucide-react';
+import { classifyToolCall, isAlwaysAllowSafe } from '../../shared/coding-task-state';
 
 interface PermissionDialogProps {
   permission: PermissionRequest;
@@ -12,6 +13,8 @@ export function PermissionDialog({ permission }: PermissionDialogProps) {
   const { t } = useTranslation();
   const { respondToPermission } = useIPC();
   const [pendingAlwaysAllow, setPendingAlwaysAllow] = useState(false);
+  const classification = classifyToolCall(permission.toolName, permission.input);
+  const canAlwaysAllow = isAlwaysAllowSafe(classification);
 
   const getToolDescription = (toolName: string): string => {
     const key = `permission.toolDescriptions.${toolName}`;
@@ -24,14 +27,7 @@ export function PermissionDialog({ permission }: PermissionDialogProps) {
     return t('permission.useTool', { toolName });
   };
 
-  const isHighRisk = [
-    'bash',
-    'write',
-    'edit',
-    'execute_command',
-    'write_file',
-    'edit_file',
-  ].includes(permission.toolName);
+  const isHighRisk = classification.risk === 'high';
 
   return (
     <div className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 animate-fade-in">
@@ -56,6 +52,12 @@ export function PermissionDialog({ permission }: PermissionDialogProps) {
             </h2>
             <p className="text-sm text-text-secondary mt-1">
               {getToolDescription(permission.toolName)}
+            </p>
+            <p className="text-xs text-text-muted mt-2">
+              The run is paused until you approve or deny this step.
+            </p>
+            <p className="text-xs text-text-muted mt-1">
+              {classification.summary}
             </p>
           </div>
         </div>
@@ -105,18 +107,20 @@ export function PermissionDialog({ permission }: PermissionDialogProps) {
         </div>
 
         {/* Always Allow option */}
-        {!pendingAlwaysAllow ? (
+        {!canAlwaysAllow ? (
+          <div className="mt-2 p-3 bg-surface-muted rounded-xl">
+            <p className="text-xs text-text-muted leading-relaxed">
+              This tool can change files or system state, so it stays on one-time approval.
+            </p>
+          </div>
+        ) : !pendingAlwaysAllow ? (
           <button
             onClick={() => {
-              const dangerousTools = ['bash', 'write', 'edit', 'execute_command'];
-              const isDangerous = dangerousTools.some((tool) =>
-                permission.toolName?.toLowerCase().includes(tool)
-              );
-              if (isDangerous) {
+              if (classification.risk !== 'low') {
                 setPendingAlwaysAllow(true);
-              } else {
-                respondToPermission(permission.toolUseId, 'allow_always');
+                return;
               }
+              respondToPermission(permission.toolUseId, 'allow_always');
             }}
             className="w-full mt-2 btn btn-ghost text-sm"
           >
@@ -125,7 +129,7 @@ export function PermissionDialog({ permission }: PermissionDialogProps) {
         ) : (
           <div className="mt-2 p-3 bg-warning/10 border border-warning/20 rounded-xl">
             <p className="text-sm text-warning mb-2">
-              {`Are you sure you want to always allow "${permission.toolName}"? This tool can modify your system.`}
+              {`Always allow "${permission.toolName}" for future runs? This can change files or system state.`}
             </p>
             <div className="flex gap-2">
               <button

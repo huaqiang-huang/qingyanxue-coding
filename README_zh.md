@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/平台-Windows%20%7C%20macOS-blue" alt="Platform" />
+  <img src="https://img.shields.io/badge/平台-Windows%20%7C%20macOS%20%7C%20Linux-blue" alt="Platform" />
   <img src="https://img.shields.io/badge/协议-MIT-green" alt="License" />
   <img src="https://img.shields.io/badge/Node.js-18+-brightgreen" alt="Node.js" />
   <a href="https://discord.gg/pynjtQDf"><img src="https://img.shields.io/discord/1493588403260883078?logo=discord&label=Discord&color=5865F2" alt="Discord" /></a>
@@ -27,13 +27,13 @@
 
 ---
 
-Open Cowork 是一款免费开源的 AI 智能助手桌面应用，支持 Windows 和 macOS 一键安装，无需任何编程知识。它将 Claude Code、OpenAI、Gemini、DeepSeek 等多种 AI 模型封装为友好的图形界面，提供虚拟机级别的沙盒隔离（Windows 使用 WSL2，macOS 使用 Lima）、内置 Skills 技能系统（可生成 PPTX、DOCX、XLSX、PDF 文档）、MCP 协议集成（连接浏览器、Notion 等桌面应用）、GUI 自动化操作，以及通过飞书和 Slack 进行远程控制。Open Cowork 是 Claude Cowork 的开源实现，让每个人都能轻松使用 AI 驱动的桌面自动化。
+Open Cowork 是一款免费开源的 AI 智能助手桌面应用，支持 Windows、macOS 和 Linux 使用。它将 Claude Code、OpenAI、Gemini、DeepSeek 等多种 AI 模型封装为友好的图形界面，提供虚拟机级别的沙盒隔离（Windows 使用 WSL2，macOS 使用 Lima）、内置 Skills 技能系统（可生成 PPTX、DOCX、XLSX、PDF 文档）、MCP 协议集成（连接浏览器、Notion 等桌面应用）、GUI 自动化操作，以及通过飞书和 Slack 进行远程控制。Linux 当前以原生工作区隔离为主，还没有内置 VM 式沙盒。Open Cowork 是 Claude Cowork 的开源实现，让每个人都能轻松使用 AI 驱动的桌面自动化。
 
 ---
 
 ## 📖 简介
 
-**Open Cowork** 是 **Claude Cowork** 的开源实现，提供 **Windows** 和 **macOS** 一键安装包，无需任何编程知识。
+**Open Cowork** 是 **Claude Cowork** 的开源实现，提供 **Windows**、**macOS** 和 **Linux** 安装包，无需任何编程知识。
 
 它为 AI 提供了一个沙盒化的工作环境，可以管理文件、通过内置的 **Skills** 系统生成专业文件（PPTX、DOCX、XLSX等）和 **通过MCP链接桌面APP**（浏览器、Notion等）进行人机协作等等。
 
@@ -52,7 +52,7 @@ Open Cowork 是一款免费开源的 AI 智能助手桌面应用，支持 Window
 | OpenClaw      | ✓            | ✓        | ✗            |
 | OpenCowork    | ✓            | ✓        | ✓            |
 
-- **一键安装，开箱即用**：提供 Windows 和 macOS 预构建安装包，无需配置环境，下载即可开始使用。。
+- **一键安装，开箱即用**：提供 Windows、macOS 和 Linux 预构建安装包，无需配置环境，下载即可开始使用。
 - **灵活模型支持**：支持 **Claude**、**OpenAI 兼容接口**，以及国产大模型 **GLM**、**MiniMax**、**Kimi** 等。使用你的 OpenRouter、Anthropic等API Key，灵活配置。更多模型持续接入中！
 - **远程控制**：可以接入**飞书**等协作平台和远程服务，实现工作流自动化和跨平台操作。
 - **图形界面操作**：可以控制和操作电脑上的各种桌面 GUI 应用程序。**推荐使用 Gemini-3-Pro 模型**以获得最佳的 GUI 理解和控制效果。
@@ -104,8 +104,9 @@ brew install --cask --no-quarantine open-cowork
 
 | 平台                      | 文件类型 |
 | ------------------------- | -------- |
-| **Windows**               | `.exe`   |
-| **macOS** (Apple Silicon) | `.dmg`   |
+| **Windows**               | `.exe`      |
+| **macOS** (Apple Silicon) | `.dmg`      |
+| **Linux** (x64)           | `.AppImage` |
 
 ### 方式三：源码编译
 
@@ -119,7 +120,15 @@ npm run rebuild
 npm run dev
 ```
 
-构建安装包：`npm run build`
+构建安装包：
+
+```bash
+npm run build
+# 或在对应系统上定向构建
+npm run build:mac
+npm run build:win
+npm run build:linux
+```
 
 ### 安全配置：🔒 沙盒支持
 
@@ -127,12 +136,14 @@ Open Cowork 提供**多级沙盒保护**，确保系统安全：
 
 | 级别     | 平台    | 技术     | 说明                            |
 | -------- | ------- | -------- | ------------------------------- |
-| **基础** | 全平台  | 路径守卫 | 文件操作限制在工作区文件夹内    |
-| **增强** | Windows | WSL2     | 命令在隔离的 Linux 虚拟机中执行 |
-| **增强** | macOS   | Lima     | 命令在隔离的 Linux 虚拟机中执行 |
+| **基础** | Linux   | Native   | 命令在本机执行，但受工作区/路径限制 |
+| **基础** | 全平台  | 路径守卫 | 文件操作限制在工作区文件夹内        |
+| **增强** | Windows | WSL2     | 命令在隔离的 Linux 虚拟机中执行     |
+| **增强** | macOS   | Lima     | 命令在隔离的 Linux 虚拟机中执行     |
 
 - **Windows (WSL2)**：检测到 WSL2 后，所有 Bash 命令自动路由到 Linux 虚拟机，工作区双向同步。
 - **macOS (Lima)**：安装 [Lima](https://lima-vm.io/) (`brew install lima`) 后，命令在挂载了 `/Users` 的 Ubuntu 虚拟机中运行。
+- **Linux**：当前默认走原生模式，依赖工作区/路径限制保护，还没有内置 VM 式沙盒。
 - **回退模式**：如果没有可用的虚拟机，命令将在本机执行，受路径限制保护。
 
 **配置方法（可选、推荐）**

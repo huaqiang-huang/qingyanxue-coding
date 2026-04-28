@@ -34,25 +34,25 @@
 
   /* Light theme override — Claude warm cream */
   .light {
-    --color-background: #f5f3ed;
-    --color-background-secondary: #f0eee8;
-    --color-surface: #faf9f4;
-    --color-surface-hover: #f5f3ed;
-    --color-surface-active: #eceae4;
-    --color-surface-muted: #f2f0eb;
-    --color-border: #e2dfd9;
-    --color-border-muted: #e8e6e0;
-    --color-border-subtle: rgba(0, 0, 0, 0.05);
+    --color-background: #f4f7fa;
+    --color-background-secondary: #e7edf2;
+    --color-surface: #fbfcfd;
+    --color-surface-hover: #f1f5f8;
+    --color-surface-active: #e8edf2;
+    --color-surface-muted: #eef3f7;
+    --color-border: #c3ccd5;
+    --color-border-muted: #d2d9e0;
+    --color-border-subtle: rgba(67, 84, 101, 0.08);
     --color-mcp: #8570a6;
-    --shadow-soft: 0 1px 4px rgba(0, 0, 0, 0.04);
-    --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
-    --shadow-elevated: 0 4px 12px rgba(0, 0, 0, 0.1);
+    --shadow-soft: 0 1px 4px rgba(44, 59, 79, 0.06);
+    --shadow-card: 0 1px 2px rgba(44, 59, 79, 0.05), 0 12px 28px rgba(44, 59, 79, 0.08);
+    --shadow-elevated: 0 10px 30px rgba(44, 59, 79, 0.14);
     --color-accent: #d97757;
     --color-accent-hover: #c46849;
     --color-accent-muted: #fef3ee;
-    --color-text-primary: #1a1a1a;
-    --color-text-secondary: #5c5c5c;
-    --color-text-muted: #8c8c8c;
+    --color-text-primary: #1f2933;
+    --color-text-secondary: #52606d;
+    --color-text-muted: #7b8794;
     --color-success: #16a34a;
     --color-warning: #ca8a04;
     --color-error: #dc2626;
@@ -79,6 +79,13 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
+  }
+
+  .light body,
+  body.light {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.12)),
+      #bcc3c9;
   }
 
   /* Custom scrollbar — only on non-macOS platforms.

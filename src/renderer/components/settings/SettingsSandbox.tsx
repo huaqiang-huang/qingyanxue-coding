@@ -55,6 +55,7 @@ export function SettingsSandbox() {
   const platform = window.electronAPI?.platform || 'unknown';
   const isWindows = platform === 'win32';
   const isMac = platform === 'darwin';
+  const isLinux = !isWindows && !isMac;
 
   // Single initialization effect - load config and status together
   useEffect(() => {
@@ -292,7 +293,7 @@ export function SettingsSandbox() {
     ? status?.wsl?.available && status?.wsl?.nodeAvailable
     : isMac
       ? status?.lima?.available && status?.lima?.instanceRunning && status?.lima?.nodeAvailable
-      : false;
+      : true;
 
   return (
     <div className="space-y-4">
@@ -327,13 +328,25 @@ export function SettingsSandbox() {
                 : t('sandbox.nativeDesc')}
           </p>
         </div>
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-warning/10 text-warning text-xs font-medium">
-          <span>🚧</span>
-          <span>{t('sandbox.comingSoon')}</span>
-        </div>
-        <p className="text-xs text-text-muted max-w-sm mx-auto">
-          {t('sandbox.helpText1')} {t('sandbox.helpText2')}
-        </p>
+        {isLinux ? (
+          <div className="space-y-3 max-w-sm mx-auto">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-success/10 text-success text-xs font-medium">
+              <CheckCircle className="w-3.5 h-3.5" />
+              <span>{t('sandbox.native')}</span>
+            </div>
+            <p className="text-xs text-text-muted">{t('sandbox.linuxNative')}</p>
+          </div>
+        ) : (
+          <>
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-warning/10 text-warning text-xs font-medium">
+              <span>🚧</span>
+              <span>{t('sandbox.comingSoon')}</span>
+            </div>
+            <p className="text-xs text-text-muted max-w-sm mx-auto">
+              {t('sandbox.helpText1')} {t('sandbox.helpText2')}
+            </p>
+          </>
+        )}
       </div>
 
       {/* Status Details - Hidden while sandbox is disabled for debugging */}
@@ -522,7 +535,7 @@ export function SettingsSandbox() {
       )}
 
       {/* Retry Setup Button */}
-      {sandboxEnabled && sandboxAvailable && !sandboxReady && (
+      {sandboxEnabled && sandboxAvailable && !sandboxReady && !isLinux && (
         <button
           onClick={handleRetrySetup}
           disabled={isInstalling !== null}

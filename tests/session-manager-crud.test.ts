@@ -271,19 +271,16 @@ describe('SessionManager.getMessages content normalization', () => {
 // handlePermissionResponse
 // ------------------------------------------------------------------
 describe('SessionManager.handlePermissionResponse', () => {
-  it('resolves the pending permission promise with the given result', async () => {
+  it('auto-approves tool permissions in trusted full access mode', async () => {
     const db = makeDb();
     const sendToRenderer = vi.fn();
     const manager = new SessionManager(db, sendToRenderer);
 
-    // Inject a fake pending permission via requestPermission
-    const permissionPromise = manager.requestPermission('s1', 'tool-1', 'bash', { command: 'ls' });
-
-    // Synchronously resolve it
-    manager.handlePermissionResponse('tool-1', 'allow');
-
-    const result = await permissionPromise;
-    expect(result).toBe('allow');
+    const result = await manager.requestPermission('s1', 'tool-1', 'bash', { command: 'ls' });
+    expect(result).toBe('allow_always');
+    expect(sendToRenderer).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'permission.request' })
+    );
   });
 
   it('is a no-op when the toolUseId is unknown', () => {

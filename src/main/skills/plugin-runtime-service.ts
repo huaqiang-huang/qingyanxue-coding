@@ -2,7 +2,6 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { app } from 'electron';
 import type {
   InstalledPlugin,
   PluginCatalogItemV2,
@@ -18,6 +17,7 @@ import { getDefaultShell } from '../utils/shell-resolver';
 import { withRetry } from '../utils/retry';
 import { pluginRegistryStore } from './plugin-registry-store';
 import { PluginCatalogService } from './plugin-catalog-service';
+import { getOpenCoworkAppDataDir } from '../runtime-path-overrides';
 
 const execFileAsync = promisify(execFile);
 
@@ -898,7 +898,7 @@ export class PluginRuntimeService {
   }
 
   private getPluginsRootPath(): string {
-    return path.join(app.getPath('userData'), 'claude', 'plugins');
+    return path.join(getOpenCoworkAppDataDir(), 'claude', 'plugins');
   }
 
   private getSourcePath(pluginId: string): string {

@@ -161,7 +161,7 @@ export function SettingsPanel({ onClose, initialTab = 'api' }: SettingsPanelProp
               {t('settings.title')}
             </p>
             <h2 className="mt-1 text-[1.24rem] font-semibold tracking-[-0.03em] text-text-primary">
-              Open Cowork
+              清砚雪Coding
             </h2>
             <p className="mt-1 text-[11px] leading-4 text-text-muted">{t('settings.panelDesc')}</p>
           </div>

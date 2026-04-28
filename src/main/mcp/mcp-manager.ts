@@ -20,6 +20,7 @@ import { app, BrowserWindow } from 'electron';
 import path from 'path';
 import { log, logError, logWarn, logCtx, logCtxError, logTiming } from '../utils/logger';
 import { getDefaultShell } from '../utils/shell-resolver';
+import { getOpenCoworkAppDataDir } from '../runtime-path-overrides';
 
 /**
  * MCP Server Configuration
@@ -1166,7 +1167,7 @@ export class MCPManager {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const path = require('path');
     // Use userData so the debug profile survives reboots and isn't wiped by OS temp-dir cleanup
-    return path.join(app.getPath('userData'), 'chrome-mcp-debug');
+    return path.join(getOpenCoworkAppDataDir(), 'chrome-mcp-debug');
   }
 
   /**

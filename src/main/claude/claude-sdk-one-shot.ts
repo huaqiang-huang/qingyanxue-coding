@@ -33,6 +33,12 @@ const PROBE_ACK = 'sdk_probe_ok';
 const LOCAL_ANTHROPIC_PLACEHOLDER_KEY = 'sk-ant-local-proxy';
 const LOCAL_GEMINI_PLACEHOLDER_KEY = 'sk-gemini-local-proxy';
 
+function shouldWarnSyntheticModel(provider?: string, customProtocol?: string): boolean {
+  if (provider === 'custom') return false;
+  if (provider === 'openai' && customProtocol === 'openai') return false;
+  return provider !== 'openrouter';
+}
+
 function resolveProbeBaseUrl(input: ApiTestInput): string | undefined {
   const configured = input.baseUrl?.trim();
   if (configured) return configured;
@@ -213,7 +219,10 @@ async function runPiAiOneShot(
       rawProvider: config.provider || 'anthropic',
       customProtocol: config.customProtocol,
     });
-    logWarn('[OneShot] Model not in pi-ai registry, using synthetic model:', modelString, '→', api);
+    const syntheticLog = shouldWarnSyntheticModel(config.provider, config.customProtocol)
+      ? logWarn
+      : log;
+    syntheticLog('[OneShot] Model not in pi-ai registry, using synthetic model:', modelString, '→', api);
   }
 
   // piModel is guaranteed non-undefined after synthetic fallback

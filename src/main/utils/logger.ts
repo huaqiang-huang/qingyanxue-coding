@@ -7,6 +7,7 @@ import * as path from 'path';
 import { app } from 'electron';
 import { AsyncLocalStorage } from 'async_hooks';
 import { randomUUID } from 'crypto';
+import { getOpenCoworkAppDataDir } from '../runtime-path-overrides';
 
 // ── Structured log context (propagated via AsyncLocalStorage) ──
 
@@ -79,18 +80,7 @@ function attachLogStreamErrorHandler(stream: fs.WriteStream, filePath: string): 
 }
 
 function resolveUserDataPath(): string {
-  try {
-    if (app && typeof app.getPath === 'function') {
-      const userDataPath = app.getPath('userData');
-      if (userDataPath?.trim()) {
-        return userDataPath;
-      }
-    }
-  } catch {
-    // Fallback to local path when Electron app context is unavailable
-  }
-
-  return path.join(process.cwd(), '.cowork-user-data');
+  return getOpenCoworkAppDataDir();
 }
 
 function resolveAppVersion(): string {

@@ -110,12 +110,20 @@ function buildCheckList(platform, arch) {
       }
     );
   } else if (platform === 'linux') {
-    checks.push({
-      label: 'Node.js directory for Linux x64',
-      relPath: 'resources/node/linux-x64',
-      type: 'dir',
-      severity: 'fatal',
-    });
+    checks.push(
+      {
+        label: 'Node.js directory for Linux x64',
+        relPath: 'resources/node/linux-x64',
+        type: 'dir',
+        severity: 'fatal',
+      },
+      {
+        label: `Python runtime for Linux ${arch} (GUI automation helpers)`,
+        relPath: `resources/python/linux-${arch}`,
+        type: 'dir',
+        severity: 'warn',
+      }
+    );
   }
 
   return checks;

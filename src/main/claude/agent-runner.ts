@@ -66,9 +66,17 @@ import {
   normalizeToolExecutionResultForUi,
 } from './tool-result-utils';
 import { fetchOllamaModelInfo } from '../config/ollama-api';
+import { buildTaskStatePreamble, classifyToolCall } from '../../shared/coding-task-state';
+import { getOpenCoworkAppDataDir } from '../runtime-path-overrides';
 
 // Virtual workspace path shown to the model (hides real sandbox path)
 const VIRTUAL_WORKSPACE_PATH = '/workspace';
+
+function shouldWarnSyntheticModel(provider?: string, customProtocol?: string): boolean {
+  if (provider === 'custom') return false;
+  if (provider === 'openai' && customProtocol === 'openai') return false;
+  return provider !== 'openrouter';
+}
 
 /**
  * Estimate chars-per-token ratio based on content language.
@@ -396,6 +404,7 @@ function normalizeTokenUsage(usage: unknown): Message['tokenUsage'] | undefined 
 interface AgentRunnerOptions {
   sendToRenderer: (event: ServerEvent) => void;
   saveMessage?: (message: Message) => void;
+  getTraceSteps?: (sessionId: string) => TraceStep[];
   requestSudoPassword?: (
     sessionId: string,
     toolUseId: string,
@@ -422,6 +431,7 @@ interface CachedPiSession {
 export class ClaudeAgentRunner {
   private sendToRenderer: (event: ServerEvent) => void;
   private saveMessage?: (message: Message) => void;
+  private getTraceSteps?: (sessionId: string) => TraceStep[];
   private requestSudoPassword?: (
     sessionId: string,
     toolUseId: string,
@@ -567,7 +577,7 @@ ${hints.join('\n')}
   }
 
   private getAppClaudeDir(): string {
-    return path.join(app.getPath('userData'), 'claude');
+    return path.join(getOpenCoworkAppDataDir(), 'claude');
   }
 
   private getRuntimeSkillsDir(): string {
@@ -619,16 +629,8 @@ ${hints.join('\n')}
       const sourcePath = path.join(userSkillsDir, entry.name);
       const targetPath = path.join(appSkillsDir, entry.name);
 
-      if (fs.existsSync(targetPath)) {
-        try {
-          const stat = fs.lstatSync(targetPath);
-          if (!stat.isSymbolicLink()) {
-            continue;
-          }
-          fs.unlinkSync(targetPath);
-        } catch {
-          continue;
-        }
+      if (!this.prepareSkillTargetPath(targetPath)) {
+        continue;
       }
 
       try {
@@ -658,14 +660,8 @@ ${hints.join('\n')}
       const sourcePath = path.join(configuredSkillsDir, entry.name);
       const targetPath = path.join(runtimeSkillsDir, entry.name);
       try {
-        if (fs.existsSync(targetPath)) {
-          // Use lstatSync so we don't follow symlinks — check the entry itself
-          const stat = fs.lstatSync(targetPath);
-          if (stat.isSymbolicLink()) {
-            fs.unlinkSync(targetPath);
-          } else {
-            fs.rmSync(targetPath, { recursive: true, force: true });
-          }
+        if (!this.prepareSkillTargetPath(targetPath, { removeDirectories: true })) {
+          continue;
         }
         fs.symlinkSync(sourcePath, targetPath, 'dir');
       } catch (err) {
@@ -678,7 +674,55 @@ ${hints.join('\n')}
     }
   }
 
+  private prepareSkillTargetPath(
+    targetPath: string,
+    options: { removeDirectories?: boolean } = {}
+  ): boolean {
+    try {
+      const lstat = fs.lstatSync(targetPath);
+
+      if (lstat.isSymbolicLink()) {
+        let linkTarget = '';
+        try {
+          linkTarget = fs.readlinkSync(targetPath);
+        } catch {
+          // Ignore readlink failures and still remove the symlink below.
+        }
+
+        const targetExists = fs.existsSync(targetPath);
+        const pointsToLegacyBundle =
+          /\/Applications\/Open Cowork\.app\//.test(linkTarget) ||
+          /\/Applications\/清砚雪Coding\.app\//.test(linkTarget);
+
+        if (!targetExists || pointsToLegacyBundle) {
+          fs.unlinkSync(targetPath);
+          return true;
+        }
+
+        return false;
+      }
+
+      if (options.removeDirectories) {
+        fs.rmSync(targetPath, { recursive: true, force: true });
+        return true;
+      }
+
+      return false;
+    } catch {
+      return true;
+    }
+  }
+
   private copyDirectorySync(source: string, target: string): void {
+    try {
+      const lstat = fs.lstatSync(target);
+      if (lstat.isSymbolicLink() && !fs.existsSync(target)) {
+        fs.unlinkSync(target);
+      }
+    } catch {
+      // Target missing is fine.
+    }
+
     if (!fs.existsSync(target)) {
       fs.mkdirSync(target, { recursive: true });
     }
@@ -706,6 +750,7 @@ ${hints.join('\n')}
   ) {
     this.sendToRenderer = options.sendToRenderer;
     this.saveMessage = options.saveMessage;
+    this.getTraceSteps = options.getTraceSteps;
     this.requestSudoPassword = options.requestSudoPassword;
     this.pathResolver = pathResolver;
     this.mcpManager = mcpManager;
@@ -1314,7 +1359,13 @@ ${hints.join('\n')}
           rawProvider: runtimeConfig.provider,
           customProtocol: runtimeConfig.customProtocol,
         });
-        logCtxWarn(
+        const syntheticLog = shouldWarnSyntheticModel(
+          runtimeConfig.provider,
+          runtimeConfig.customProtocol
+        )
+          ? logCtxWarn
+          : logCtx;
+        syntheticLog(
           '[ClaudeAgentRunner] Model not in pi-ai registry, using synthetic model:',
           modelString,
           '→',
@@ -1345,12 +1396,29 @@ ${hints.join('\n')}
         }
       }
 
+      // Always honor explicit user overrides, even for registry-resolved models.
+      // Without this, the settings panel may show a manual value like 256000
+      // while the runtime/UI sidebar still falls back to the model default.
+      const effectiveContextWindow =
+        runtimeConfig.contextWindow || piModel.contextWindow || 128000;
+      const effectiveMaxTokens = runtimeConfig.maxTokens || piModel.maxTokens || 16384;
+      if (
+        piModel.contextWindow !== effectiveContextWindow
+        || piModel.maxTokens !== effectiveMaxTokens
+      ) {
+        piModel = {
+          ...piModel,
+          contextWindow: effectiveContextWindow,
+          maxTokens: effectiveMaxTokens,
+        };
+      }
+
       // Send context window info to renderer for UI display
       this.sendToRenderer({
         type: 'session.contextInfo',
         payload: {
           sessionId: session.id,
-          contextWindow: piModel.contextWindow || 128000,
+          contextWindow: effectiveContextWindow,
         },
       });
 
@@ -1430,19 +1498,7 @@ ${hints.join('\n')}
             const builtinSkillPath = path.join(builtinSkillsPath, skillName);
             const userSkillPath = path.join(appSkillsDir, skillName);
 
-            // Clean up broken symlinks pointing into .asar from previous versions
-            try {
-              const lstat = fs.lstatSync(userSkillPath);
-              if (lstat.isSymbolicLink()) {
-                const linkTarget = fs.readlinkSync(userSkillPath);
-                if (/\.asar[/\\]/.test(linkTarget)) {
-                  fs.unlinkSync(userSkillPath);
-                  log(`[ClaudeAgentRunner] Removed broken asar symlink: ${userSkillPath}`);
-                }
-              }
-            } catch {
-              // Path doesn't exist — fine, we'll create it below
-            }
+            this.prepareSkillTargetPath(userSkillPath);
 
             // Only set up if it's a directory and doesn't exist in app directory
             if (fs.statSync(builtinSkillPath).isDirectory() && !fs.existsSync(userSkillPath)) {
@@ -1513,7 +1569,11 @@ ${hints.join('\n')}
         cachedSession = undefined;
       }
 
-      let contextualPrompt = prompt;
+      const traceSteps = this.getTraceSteps ? this.getTraceSteps(session.id) : [];
+      const taskStatePreamble = buildTaskStatePreamble(existingMessages, traceSteps, {
+        includeRecentSteps: true,
+      });
+      let contextualPrompt = taskStatePreamble ? `${taskStatePreamble}\n\n${prompt}` : prompt;
       if (!cachedSession) {
         // Cold start: inject recent history into prompt if available
         const conversationMessages = existingMessages.filter(
@@ -1566,7 +1626,9 @@ ${hints.join('\n')}
             const historyNote =
               trimmedCount > 0 ? `[${trimmedCount} older messages omitted]\n` : '';
             const preamble = `<conversation_history>\n${historyNote}${historyItems.join('\n')}\n</conversation_history>`;
-            contextualPrompt = `${preamble}\n\n${prompt}`;
+            contextualPrompt = taskStatePreamble
+              ? `${taskStatePreamble}\n\n${preamble}\n\n${prompt}`
+              : `${preamble}\n\n${prompt}`;
             log(
               '[ClaudeAgentRunner] Cold start: injecting',
               historyItems.length,
@@ -1585,6 +1647,9 @@ ${hints.join('\n')}
       } else {
         // Reusing session — SDK already has the full conversation context
         logCtx('[ClaudeAgentRunner] Reusing existing SDK session for:', session.id);
+        if (taskStatePreamble) {
+          logCtx('[ClaudeAgentRunner] Injecting current task state preamble for warm session');
+        }
       }
 
       logTiming('before building MCP servers config', runStartTime);
@@ -1746,13 +1811,23 @@ This is an isolated sandbox environment. Use ${VIRTUAL_WORKSPACE_PATH} as the ro
             : '';
 
       const coworkAppendPrompt = [
-        'You are an Open Cowork assistant. Be concise, accurate, and tool-capable.',
+        'You are the coding-first Open Cowork assistant. Behave like a decisive software engineering agent: concise, execution-oriented, and strong with tools.',
         `CRITICAL BEHAVIORAL RULES:
-1. CHAT FIRST: By default, respond to the user in plain text within the conversation. Do NOT create, write, or edit files unless the user explicitly asks you to (e.g., "create a file", "write this to...", "edit the code", "save as...", mentions a specific file path, or describes code changes they want applied). For questions, summaries, explanations, analysis, and general conversation — always reply directly in chat text.
-2. When a request is actionable, proceed immediately with reasonable assumptions. If you need clarification, ask briefly in plain text.
-3. For relative time windows like "within two days" in browsing or research tasks, assume the most recent two relevant publication days unless the user explicitly defines another date range.
-4. For bracketed placeholders like [Agent], [Topic], etc., treat the word inside brackets as the literal search keyword unless the user says otherwise.
-5. When given a task, START DOING IT. Do not restate the task, do not list what you will do, do not ask for confirmation. Just execute.`,
+1. CHAT FIRST only for purely conceptual questions; for implementation, debugging, refactoring, repo exploration, environment diagnosis, or project work, assume the user wants you to actively do the work instead of only discussing it.
+2. For actionable coding tasks, proceed immediately with reasonable assumptions. Gather the minimum context, use tools, make progress, and report only the essential outcome. Do not restate the task or ask for confirmation unless a risky decision blocks execution.
+3. Do NOT create, write, or edit files unless the user explicitly asks, or the request clearly implies code or file changes are needed to complete it.
+4. DEFAULT WORK LOOP: For non-trivial code tasks, prefer this loop: inspect the relevant files -> form a compact plan internally -> execute edits/commands -> validate with tests/checks when feasible -> summarize outcome and remaining risk.
+5. ASK ONLY WHEN BLOCKED: Ask a brief question only when the answer materially changes the implementation and cannot be inferred from the repo, workspace, or prior user context.
+6. VERIFY CHANGES: After edits, run at least one verification step when feasible. If you cannot verify, say so plainly.
+7. TOOL DISCIPLINE: Prefer fast repo-native tools and direct file operations over long explanations. For search use grep/glob-style tools. For shell work, prefer concise commands and avoid unnecessary chatter.
+8. USE TODOS FOR MULTI-STEP WORK: When the task spans multiple concrete steps, maintain a todo list so progress stays visible and grounded.
+9. KEEP RESPONSES TIGHT: Be brief, practical, and coding-focused. Avoid generic encouragement, repeated plans, and long prose unless the user asks for depth.
+10. FOR PURELY CONCEPTUAL OR ADVICE-ONLY QUESTIONS: answer directly in chat without unnecessary file edits or commands.
+11. When given a task, START DOING IT. Do not restate the task, do not list what you will do, do not ask for confirmation. Just execute.
+12. For relative time windows like "within two days" in browsing or research tasks, assume the most recent two relevant publication days unless the user explicitly defines another date range.
+13. For bracketed placeholders like [Agent], [Topic], etc., treat the word inside brackets as the literal search keyword unless the user says otherwise.
+14. After changing files or running mutation-heavy commands, prefer at least one verification step before ending the turn.
+15. If a tool call fails, inspect the error and retry once with a narrower or corrected command before asking the user for help.`,
         workspaceInfoPrompt,
         `<citation_requirements>
 If your answer uses linkable content from MCP tools, include a "Sources:" section and otherwise use standard Markdown links: [Title](https://claude.ai/chat/URL).
@@ -1761,6 +1836,9 @@ If your answer uses linkable content from MCP tools, include a "Sources:" sectio
 Tool routing:
 - If user explicitly asks to use Chrome/browser/web navigation, prioritize Chrome MCP tools (mcp__Chrome__*) over generic WebSearch/WebFetch.
 - Use WebSearch/WebFetch only when Chrome MCP is unavailable or the user explicitly asks for generic web search.
+- Prefer coding tools before prose. For repository tasks, start by reading files or searching the workspace.
+- Prefer bash for repo inspection, running tests, and iterative validation when shell access is available.
+- Prefer editing files directly when the user asks for changes; do not stop at high-level suggestions.
 </tool_behavior>`,
         this.getBundledPathHints(),
       ]
@@ -2114,16 +2192,18 @@ Tool routing:
                 const toolContent = partial?.content?.[ame.contentIndex];
                 const toolName = toolContent?.type === 'toolCall' ? toolContent.name : 'unknown';
                 const toolCallId = toolContent?.type === 'toolCall' ? toolContent.id : uuidv4();
+                const toolInput =
+                  toolContent?.type === 'toolCall'
+                    ? ((toolContent.arguments as Record<string, unknown>) || {})
+                    : undefined;
+                const classification = classifyToolCall(toolName, toolInput);
                 this.sendTraceStep(session.id, {
                   id: toolCallId,
                   type: 'tool_call',
                   status: 'running',
-                  title: toolName,
+                  title: classification.summary,
                   toolName,
-                  toolInput:
-                    toolContent?.type === 'toolCall'
-                      ? (toolContent.arguments as Record<string, unknown>) || {}
-                      : undefined,
+                  toolInput,
                   timestamp: Date.now(),
                 });
               } else if (ame.type === 'done') {

@@ -4,10 +4,10 @@
  */
 
 import Database from 'better-sqlite3';
-import { app } from 'electron';
 import { join } from 'path';
 import { existsSync, mkdirSync, statSync, renameSync, openSync, readSync, closeSync } from 'fs';
 import { log, logError, logWarn } from '../utils/logger';
+import { getOpenCoworkAppDataDir } from '../runtime-path-overrides';
 
 export interface DatabaseInstance {
   // Raw database access (for advanced queries)
@@ -199,8 +199,7 @@ function prepareDatabaseDirectory(userDataPath: string): string {
  * Get the database file path
  */
 function getDatabasePath(): string {
-  // Use electron's userData path for persistent storage
-  const userDataPath = app.getPath('userData');
+  const userDataPath = getOpenCoworkAppDataDir();
   const dbDir = prepareDatabaseDirectory(userDataPath);
   const dbPath = join(dbDir, 'cowork.db');
 

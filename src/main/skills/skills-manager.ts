@@ -19,6 +19,7 @@ import type { Skill, PluginInstallResult } from '../../renderer/types';
 import type { DatabaseInstance } from '../db/database';
 import { log, logError, logWarn } from '../utils/logger';
 import { isPathWithinRoot } from '../tools/path-containment';
+import { getOpenCoworkAppDataDir } from '../runtime-path-overrides';
 
 /**
  * Validate that a skill name is safe for use as a directory name.
@@ -217,7 +218,7 @@ export class SkillsManager {
   }
 
   private getDefaultGlobalSkillsPath(): string {
-    return path.join(app.getPath('userData'), 'claude', 'skills');
+    return path.join(getOpenCoworkAppDataDir(), 'claude', 'skills');
   }
 
   getGlobalSkillsPath(): string {
@@ -228,7 +229,7 @@ export class SkillsManager {
     // Validate resolved path is within expected directories
     if (configuredPath) {
       const resolved = path.resolve(configuredPath);
-      const allowedBases = [app.getPath('userData'), app.getPath('home'), process.cwd()];
+      const allowedBases = [getOpenCoworkAppDataDir(), app.getPath('home'), process.cwd()];
       const isWithinAllowed = allowedBases.some((base) => isPathWithinRoot(resolved, base));
       if (!isWithinAllowed) {
         throw new Error(`Skills path outside allowed directories: ${resolved}`);

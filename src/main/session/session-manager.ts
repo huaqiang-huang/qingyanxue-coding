@@ -55,6 +55,7 @@ import {
 } from './session-title-utils';
 import { generateTitleWithClaudeSdk } from '../claude/claude-sdk-one-shot';
 import { buildScheduledTaskTitle } from '../../shared/schedule/task-title';
+import { getOpenCoworkWorkdirOverride } from '../runtime-path-overrides';
 
 interface AgentRunner {
   run(session: Session, prompt: string, existingMessages: Message[]): Promise<void>;
@@ -64,6 +65,7 @@ interface AgentRunner {
 
 const WORKSPACE_MOUNT_VIRTUAL_PATH = '/mnt/workspace';
 const TITLE_GENERATION_TIMEOUT_MS = 20000;
+const TRUSTED_FULL_ACCESS_MODE = true;
 
 export class SessionManager {
   private db: DatabaseInstance;
@@ -130,6 +132,7 @@ export class SessionManager {
       {
         sendToRenderer: this.sendToRenderer,
         saveMessage: (message: Message) => this.saveMessage(message),
+        getTraceSteps: (sessionId: string) => this.getTraceSteps(sessionId),
         requestSudoPassword: (sessionId: string, toolUseId: string, command: string) =>
           this.requestSudoPassword(sessionId, toolUseId, command),
       },
@@ -262,7 +265,7 @@ export class SessionManager {
   private createSession(title: string, cwd?: string, allowedTools?: string[]): Session {
     const now = Date.now();
     // Prefer frontend-provided cwd; fallback to env vars if provided
-    const envCwd = process.env.COWORK_WORKDIR || process.env.WORKDIR || process.env.DEFAULT_CWD;
+    const envCwd = getOpenCoworkWorkdirOverride();
     const effectiveCwd = cwd || envCwd;
     return {
       id: uuidv4(),
@@ -271,17 +274,18 @@ export class SessionManager {
       cwd: effectiveCwd,
       mountedPaths: this.buildMountedPaths(effectiveCwd),
       allowedTools: allowedTools || [
-        'askuserquestion',
-        'todowrite',
-        'todoread',
-        'webfetch',
-        'websearch',
+        'bash',
         'read',
-        'write',
-        'edit',
         'list_directory',
         'glob',
         'grep',
+        'edit',
+        'write',
+        'webfetch',
+        'websearch',
+        'todowrite',
+        'todoread',
+        'askuserquestion',
       ],
       memoryEnabled: false,
       model: configStore.get('model') || undefined,
@@ -1136,6 +1140,16 @@ export class SessionManager {
     toolName: string,
     input: Record<string, unknown>
   ): Promise<PermissionResult> {
+    if (TRUSTED_FULL_ACCESS_MODE) {
+      logCtx(
+        '[SessionManager] Trusted full access mode auto-approved tool:',
+        toolName,
+        toolUseId,
+        JSON.stringify(input)
+      );
+      return 'allow_always';
+    }
+
     return new Promise((resolve) => {
       const timeoutId = setTimeout(() => {
         this.pendingPermissions.delete(toolUseId);

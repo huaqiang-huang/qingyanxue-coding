@@ -29,8 +29,13 @@ import {
   Cpu,
   Copy,
   Layers,
+  ListTodo,
+  AlertTriangle,
+  CheckCircle2,
+  Target,
 } from 'lucide-react';
 import type { TraceStep, MCPServerInfo } from '../types';
+import { deriveTaskSnapshot } from '../../shared/coding-task-state';
 
 const EMPTY_STEPS: TraceStep[] = [];
 
@@ -86,7 +91,10 @@ export function ContextPanel() {
   );
   const messageCount = messages.length;
   const toolCallCount = steps.filter((s) => s.type === 'tool_call').length;
+  const pendingTurnCount = ss?.pendingTurns.length ?? 0;
+  const activeTraceStep = steps.find((step) => step.status === 'running');
   const modelName = activeSession?.model || appConfig?.model || '—';
+  const taskSnapshot = useMemo(() => deriveTaskSnapshot(messages, steps), [messages, steps]);
 
   // Token usage aggregation
   const tokenUsage = useMemo(() => {
@@ -254,13 +262,27 @@ export function ContextPanel() {
           <ChevronRight className="w-3.5 h-3.5" />
         </button>
         <span className="text-xs font-medium text-text-muted uppercase tracking-wider">
-          {t('context.context')}
+          Coding Context
         </span>
       </div>
 
       {/* Session Stats */}
       {activeSession && (
         <div className="px-4 py-3 border-b border-border-muted space-y-1.5">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-medium text-text-muted uppercase tracking-wider">
+              Coding Run
+            </span>
+            <span
+              className={`text-[11px] font-medium ${
+                activeSession.status === 'running' || activeTraceStep
+                  ? 'text-accent'
+                  : 'text-text-muted'
+              }`}
+            >
+              {activeSession.status === 'running' || activeTraceStep ? 'Running' : 'Ready'}
+            </span>
+          </div>
           <div className="flex items-center gap-1.5 text-text-primary font-medium">
             <Cpu className="w-3.5 h-3.5 text-text-muted shrink-0" />
             <span className="truncate">{modelName}</span>
@@ -280,6 +302,73 @@ export function ContextPanel() {
               </span>
             )}
           </div>
+          <div className="flex flex-wrap items-center gap-2 pl-5 text-[11px] text-text-muted">
+            <span className="rounded-full border border-border-subtle bg-background/60 px-2 py-0.5">
+              {messageCount} messages
+            </span>
+            <span className="rounded-full border border-border-subtle bg-background/60 px-2 py-0.5">
+              {toolCallCount} tool calls
+            </span>
+            {pendingTurnCount > 0 && (
+              <span className="rounded-full border border-accent/20 bg-accent/8 px-2 py-0.5 text-accent">
+                {pendingTurnCount} queued
+              </span>
+            )}
+          </div>
+          {activeTraceStep?.title && (
+            <p className="pl-5 text-xs text-text-secondary truncate">
+              {activeTraceStep.title}
+            </p>
+          )}
+        </div>
+      )}
+
+      {activeSession && (taskSnapshot.objective || taskSnapshot.todo || taskSnapshot.nextAction || taskSnapshot.lastFailure) && (
+        <div className="px-4 py-3 border-b border-border-muted space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-medium text-text-muted uppercase tracking-wider">
+              Task Focus
+            </span>
+            <span
+              className={`text-[11px] font-medium ${
+                taskSnapshot.verification.status === 'verified'
+                  ? 'text-success'
+                  : taskSnapshot.verification.status === 'running'
+                    ? 'text-accent'
+                    : taskSnapshot.verification.status === 'needed'
+                      ? 'text-warning'
+                      : 'text-text-muted'
+              }`}
+            >
+              {taskSnapshot.verification.label}
+            </span>
+          </div>
+          {taskSnapshot.objective && (
+            <div className="flex items-start gap-2 text-xs text-text-secondary">
+              <Target className="w-3.5 h-3.5 text-text-muted shrink-0 mt-0.5" />
+              <span className="leading-relaxed">{taskSnapshot.objective}</span>
+            </div>
+          )}
+          {taskSnapshot.todo && (
+            <div className="flex items-center gap-2 text-xs text-text-secondary">
+              <ListTodo className="w-3.5 h-3.5 text-text-muted shrink-0" />
+              <span>
+                Plan progress {taskSnapshot.todo.completed}/{taskSnapshot.todo.total}
+              </span>
+            </div>
+          )}
+          {taskSnapshot.nextAction && (
+            <div className="flex items-start gap-2 text-xs text-text-secondary">
+              <CheckCircle2 className="w-3.5 h-3.5 text-text-muted shrink-0 mt-0.5" />
+              <span className="leading-relaxed">{taskSnapshot.nextAction}</span>
+            </div>
+          )}
+          {taskSnapshot.lastFailure && (
+            <div className="flex items-start gap-2 rounded-lg border border-warning/20 bg-warning/8 px-2.5 py-2 text-xs text-warning">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+              <span className="leading-relaxed">{taskSnapshot.lastFailure}</span>
+            </div>
+          )}
         </div>
       )}
 

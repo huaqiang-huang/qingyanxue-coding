@@ -1,8 +1,6 @@
 import Store from 'electron-store';
-import { app } from 'electron';
-import os from 'node:os';
-import path from 'node:path';
 import type { InstalledPlugin } from '../../renderer/types';
+import { getOpenCoworkAppDataDir } from '../runtime-path-overrides';
 
 interface PluginRegistrySchema {
   plugins: InstalledPlugin[];
@@ -28,14 +26,7 @@ class PluginRegistryStore {
   }
 
   private resolveStoreCwd(): string {
-    try {
-      if (typeof app?.getPath === 'function') {
-        return app.getPath('userData');
-      }
-    } catch {
-      // 测试或非 Electron 场景走兜底目录。
-    }
-    return path.join(os.tmpdir(), 'open-cowork');
+    return getOpenCoworkAppDataDir();
   }
 
   list(): InstalledPlugin[] {

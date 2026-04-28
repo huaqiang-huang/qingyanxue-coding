@@ -269,3 +269,82 @@ jobs:
           files: |
             release/*.exe
           draft: true
+
+  build-linux:
+    name: Release Linux
+    needs: [lint-and-test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Cache Electron
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+        with:
+          path: ~/.cache/electron
+          key: electron-linux-${{ hashFiles('package-lock.json') }}
+          restore-keys: electron-linux-
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download Node binaries
+        run: node scripts/download-node.js
+
+      - name: Prepare Python runtime
+        run: node scripts/prepare-python.js
+
+      - name: Build MCP servers
+        run: npm run build:mcp
+
+      - name: TypeScript compile
+        run: npx tsc
+
+      - name: Vite build
+        run: npx vite build
+
+      - name: Electron Builder
+        run: npx electron-builder --linux AppImage --publish never
+
+      - name: Smoke test - verify packaged resources
+        run: |
+          set -euo pipefail
+          APP_DIR="release/linux-unpacked"
+          if [ ! -d "$APP_DIR" ]; then
+            echo "::warning::linux-unpacked directory not found, skipping resource check"
+            exit 0
+          fi
+
+          RESOURCES="$APP_DIR/resources"
+          echo "Checking resources in: $RESOURCES"
+
+          FAILED=0
+          for check in \
+            "mcp/gui-operate-server.js" \
+            "mcp/software-dev-server-example.js" \
+            "node/bin/node" \
+            "skills"; do
+            if [ -e "$RESOURCES/$check" ]; then
+              echo "  OK: $check"
+            else
+              echo "::error::Missing resource: $check"
+              FAILED=1
+            fi
+          done
+
+          if [ "$FAILED" -eq 1 ]; then
+            echo "::error::Packaged app is missing critical resources"
+            exit 1
+          fi
+          echo "All packaged resources verified."
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v2
+        with:
+          files: |
+            release/*.AppImage
+          draft: true

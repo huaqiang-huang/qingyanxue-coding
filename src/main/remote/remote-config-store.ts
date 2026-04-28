@@ -20,11 +20,13 @@ import type {
   PairedUser,
 } from './types';
 import { DEFAULT_REMOTE_CONFIG } from './types';
+import { getOpenCoworkAppDataDir } from '../runtime-path-overrides';
 
 class RemoteConfigStore {
   private store: Store<RemoteConfig & { pairedUsers: PairedUser[] }>;
 
   constructor() {
+    const storeCwd = getOpenCoworkAppDataDir();
     // Cast to satisfy the Record<string, unknown> constraint of the encrypted store utility;
     // RemoteConfig & { pairedUsers: PairedUser[] } is structurally compatible at runtime.
     type RemoteConfigRecord = RemoteConfig & { pairedUsers: PairedUser[] } & Record<
@@ -45,6 +47,7 @@ class RemoteConfigStore {
       storeOptions: {
         name: 'remote-config',
         projectName: 'open-cowork',
+        cwd: storeCwd,
         defaults: {
           ...DEFAULT_REMOTE_CONFIG,
           pairedUsers: [],

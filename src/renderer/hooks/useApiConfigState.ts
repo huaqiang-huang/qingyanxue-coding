@@ -370,6 +370,8 @@ export function buildApiConfigDraftSignature(
       apiKey: persisted[key]?.apiKey || '',
       baseUrl: persisted[key]?.baseUrl || '',
       model: persisted[key]?.model || '',
+      contextWindow: persisted[key]?.contextWindow || null,
+      maxTokens: persisted[key]?.maxTokens || null,
     })),
   });
 }

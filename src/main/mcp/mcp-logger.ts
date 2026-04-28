@@ -9,6 +9,7 @@ import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { getOpenCoworkAppDataDir } from '../runtime-path-overrides';
 
 // Use a session-level timestamp for the log filename
 let mcpLogFilename: string | null = null;
@@ -21,24 +22,8 @@ let logInitialized = false;
  */
 function getLogsDirectory(): string {
   if (logsDir) return logsDir;
-  
-  // Determine the app data directory based on platform
-  // This should match app.getPath('userData') in Electron
-  const platform = os.platform();
-  let appDataDir: string;
-  
-  if (platform === 'darwin') {
-    // macOS: ~/Library/Application Support/open-cowork
-    appDataDir = path.join(os.homedir(), 'Library', 'Application Support', 'open-cowork');
-  } else if (platform === 'win32') {
-    // Windows: %APPDATA%/open-cowork
-    appDataDir = path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'open-cowork');
-  } else {
-    // Linux: ~/.config/open-cowork
-    appDataDir = path.join(os.homedir(), '.config', 'open-cowork');
-  }
-  
-  logsDir = path.join(appDataDir, 'logs');
+
+  logsDir = path.join(getOpenCoworkAppDataDir(), 'logs');
   
   // Ensure logs directory exists (sync for initialization)
   try {

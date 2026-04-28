@@ -398,43 +398,40 @@ export function WelcomeView() {
 
   const quickTags = [
     {
-      id: 'create',
-      label: t('welcome.createFile'),
+      id: 'bugfix',
+      label: 'Fix a bug',
       icon: FileText,
-      prompt: t('welcome.quickPromptCreate'),
+      prompt: 'Inspect this workspace, find the likely cause of the bug, implement a fix, and verify it.',
     },
     {
-      id: 'crunch',
-      label: t('welcome.crunchData'),
+      id: 'feature',
+      label: 'Build a feature',
       icon: BarChart3,
-      prompt: t('welcome.quickPromptCrunch'),
+      prompt: 'Study the relevant files, implement the requested feature, and validate the result.',
     },
     {
-      id: 'organize',
-      label: t('welcome.organizeFiles'),
+      id: 'refactor',
+      label: 'Refactor code',
       icon: FolderOpen,
-      prompt: t('welcome.quickPromptOrganize'),
+      prompt: 'Read the relevant code, refactor it safely, and run a focused verification step.',
     },
     {
-      id: 'email',
-      label: t('welcome.checkEmails'),
+      id: 'review',
+      label: 'Review changes',
       icon: Mail,
-      prompt: t('welcome.quickPromptEmail'),
-      requiresChrome: true,
+      prompt: 'Review the current code changes, call out risks first, then summarize what looks correct.',
     },
     {
-      id: 'papers',
-      label: t('welcome.searchPapers'),
+      id: 'repo-map',
+      label: 'Map this repo',
       icon: BookOpen,
-      prompt: t('welcome.quickPromptPapers'),
-      requiresChrome: true,
+      prompt: 'Map this repository: identify entrypoints, key modules, runtime flow, and the best files to read next.',
     },
     {
-      id: 'research-notion',
-      label: t('welcome.summarizePapersToNotion'),
+      id: 'debug-test',
+      label: 'Debug failing tests',
       icon: FileSearch,
-      prompt: t('welcome.quickPromptNotion'),
-      requiresNotion: true,
+      prompt: 'Run the relevant tests, diagnose the failure, fix it, and confirm the fix.',
     },
   ];
 
@@ -450,7 +447,7 @@ export function WelcomeView() {
             />
             <div className="text-left">
               <h1 className="text-[2.35rem] md:text-[3.1rem] leading-none font-semibold tracking-[-0.05em] text-text-primary">
-                Open Cowork
+                清砚雪Coding
               </h1>
             </div>
           </div>
@@ -487,27 +484,12 @@ export function WelcomeView() {
                 selectedTag === tag.id
                   ? 'border-accent/30 bg-accent-muted text-accent'
                   : 'border-border-subtle bg-background/65 text-text-secondary hover:bg-surface-hover hover:text-text-primary'
-              } ${
-                ('requiresChrome' in tag && tag.requiresChrome) ||
-                ('requiresNotion' in tag && tag.requiresNotion)
-                  ? 'relative'
-                  : ''
               }`}
             >
               <tag.icon
                 className={`w-4 h-4 ${selectedTag === tag.id ? 'text-accent' : 'text-text-muted'}`}
               />
               <span>{tag.label}</span>
-              {'requiresChrome' in tag && tag.requiresChrome && (
-                <span className="ml-1 px-1.5 py-px text-[9px] rounded bg-surface-active text-text-muted">
-                  {t('welcome.chromeRequired')}
-                </span>
-              )}
-              {'requiresNotion' in tag && tag.requiresNotion && (
-                <span className="ml-1 px-1.5 py-px text-[9px] rounded bg-surface-active text-text-muted">
-                  {t('welcome.notionRequired')}
-                </span>
-              )}
             </button>
           ))}
         </div>

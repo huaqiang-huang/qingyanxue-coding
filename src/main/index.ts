@@ -82,18 +82,32 @@ import {
 } from './utils/logger';
 import { listRecentWorkspaceFiles } from './utils/recent-workspace-files';
 import { buildDiagnosticsSummary } from './utils/diagnostics-summary';
+import { getOpenCoworkAppDataDir, getOpenCoworkUserDataOverride } from './runtime-path-overrides';
+import { runPreflight } from './preflight';
 
 // Current working directory (persisted between sessions)
 let currentWorkingDir: string | null = null;
 
+const userDataOverride = getOpenCoworkUserDataOverride();
+if (userDataOverride) {
+  fs.mkdirSync(userDataOverride, { recursive: true });
+  app.setPath('userData', userDataOverride);
+  process.env.OPEN_COWORK_USER_DATA_DIR = userDataOverride;
+  log('[App] Using isolated userData override:', userDataOverride);
+}
+
 // Load .env file from project root (for development)
 const envPath = resolve(__dirname, '../../.env');
-log('[dotenv] Loading from:', envPath);
-const dotenvResult = config({ path: envPath });
-if (dotenvResult.error) {
-  logWarn('[dotenv] Failed to load .env:', dotenvResult.error.message);
+if (fs.existsSync(envPath)) {
+  log('[dotenv] Loading from:', envPath);
+  const dotenvResult = config({ path: envPath });
+  if (dotenvResult.error) {
+    logWarn('[dotenv] Failed to load .env:', dotenvResult.error.message);
+  } else {
+    log('[dotenv] Loaded successfully');
+  }
 } else {
-  log('[dotenv] Loaded successfully');
+  log('[dotenv] No .env file found, skipping');
 }
 
 // Apply saved config (this overrides .env if config exists)
@@ -171,6 +185,7 @@ async function waitForDevServer(url: string, maxAttempts = 30, intervalMs = 500)
 // Single-instance lock: skip in dev mode so vite-plugin-electron can restart freely
 // without the old process blocking the new one during async cleanup.
 const isDev = !!process.env.VITE_DEV_SERVER_URL;
+const isIsolatedInstance = Boolean(userDataOverride);
 const ELECTRON_DEVTOOLS_DEBUG_PORT = '9223';
 
 // Enable Chrome DevTools Protocol in dev mode so the renderer can be inspected
@@ -184,11 +199,11 @@ if (isDev) {
   );
 }
 
-const hasSingleInstanceLock = isDev || app.requestSingleInstanceLock();
+const hasSingleInstanceLock = isDev || isIsolatedInstance || app.requestSingleInstanceLock();
 if (!hasSingleInstanceLock) {
   logWarn('[App] Another instance is already running, quitting this instance');
   app.quit();
-} else if (!isDev) {
+} else if (!isDev && !isIsolatedInstance) {
   app.on('second-instance', () => {
     const existingWindow =
       mainWindow && !mainWindow.isDestroyed()
@@ -304,7 +319,7 @@ function setupTray() {
   }
 
   tray = new Tray(resolvedIconPath);
-  tray.setToolTip('Open Cowork');
+  tray.setToolTip('清砚雪Coding');
 
   const contextMenu = Menu.buildFromTemplate([
     {
@@ -556,7 +571,7 @@ function createWindow() {
  */
 function initializeDefaultWorkingDir(): string {
   // Create default working directory in user data path (this is the permanent global default)
-  const userDataPath = app.getPath('userData');
+  const userDataPath = getOpenCoworkAppDataDir();
   const defaultDir = join(userDataPath, 'default_working_dir');
 
   if (!fs.existsSync(defaultDir)) {
@@ -786,6 +801,12 @@ app
       log('[SmokeTest] App launched successfully in smoke test mode');
       log('[SmokeTest] Platform:', process.platform, 'Arch:', process.arch);
       log('[SmokeTest] Electron:', process.versions.electron, 'Node:', process.versions.node);
+      const preflightIssues = runPreflight();
+      const criticalIssues = preflightIssues.filter((issue) => issue.severity === 'critical');
+      if (criticalIssues.length > 0) {
+        log('[SmokeTest] FAIL: critical bundled resources are missing:', criticalIssues);
+        process.exit(1);
+      }
       try {
         // Verify critical native modules load
         require('better-sqlite3');
@@ -803,7 +824,7 @@ app
     setDevLogsEnabled(enableDevLogs);
 
     // Log environment variables for debugging
-    log('=== Open Cowork Starting ===');
+    log('=== 清砚雪Coding Starting ===');
     log('Config file:', configStore.getPath());
     log('Is configured:', configStore.isConfigured());
     log('[Runtime] Using pi-coding-agent SDK for all providers');
@@ -818,6 +839,15 @@ app
     log('  OPENAI_MODEL:', process.env.OPENAI_MODEL || '(not set)');
     log('  OPENAI_API_MODE:', process.env.OPENAI_API_MODE || '(default)');
     log('===========================');
+
+    const preflightIssues = runPreflight();
+    const criticalPreflightIssues = preflightIssues.filter((issue) => issue.severity === 'critical');
+    if (criticalPreflightIssues.length > 0) {
+      const detail = criticalPreflightIssues.map((issue) => `- ${issue.resource}: ${issue.message}`).join('\n');
+      dialog.showErrorBox('清砚雪Coding 资源缺失', `检测到关键运行资源缺失：\n${detail}`);
+      app.quit();
+      return;
+    }
 
     // Initialize default working directory
     initializeDefaultWorkingDir();
@@ -999,7 +1029,7 @@ app
   .catch((error) => {
     logError('[App] Startup failed:', error);
     const message = error instanceof Error ? error.message : 'Unknown startup error';
-    dialog.showErrorBox('Open Cowork 启动失败', `${message}\n\n请查看日志获取更多信息。`);
+    dialog.showErrorBox('清砚雪Coding 启动失败', `${message}\n\n请查看日志获取更多信息。`);
     app.quit();
   });
 
@@ -1312,7 +1342,7 @@ async function revealFileInFolder(filePath: string, cwd?: string): Promise<boole
     const discoveredPath = findFileByName(fileName, [
       cwd || '',
       defaultWorkingDir,
-      join(app.getPath('userData'), 'default_working_dir'),
+      join(getOpenCoworkAppDataDir(), 'default_working_dir'),
     ]);
 
     if (discoveredPath) {
