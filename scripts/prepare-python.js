@@ -39,11 +39,15 @@ const ABI = `cp${PYTHON_MINOR.replace('.', '')}`; // e.g. 3.12 -> cp312
 
 const GITHUB_REPO = process.env.OPEN_COWORK_PYTHON_STANDALONE_REPO || 'astral-sh/python-build-standalone';
 const RUNTIME_VERSION_FILENAME = 'runtime-version.txt';
-const BUNDLED_GUI_PACKAGES = [
-  'pillow',
-  'pyobjc-framework-Quartz',
-];
-const BUNDLED_RUNTIME_FINGERPRINT = BUNDLED_GUI_PACKAGES.join('|');
+const BUNDLED_GUI_PACKAGES_BY_PLATFORM = {
+  darwin: [
+    'pillow',
+    'pyobjc-framework-Quartz',
+  ],
+  linux: [
+    'pillow',
+  ],
+};
 // Use the correct GitHub API endpoint (v3, no trailing slash)
 const RELEASES_API = `https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=30`;
 
@@ -324,21 +328,31 @@ function ensurePipAvailable(pythonBin) {
   }
 }
 
-function installPackages(siteDir, platformTag, pythonBin) {
+function getBundledGuiPackages(platform) {
+  return BUNDLED_GUI_PACKAGES_BY_PLATFORM[platform] || [];
+}
+
+function getBundledRuntimeFingerprint(platform) {
+  return getBundledGuiPackages(platform).join('|');
+}
+
+function installPackages(platform, siteDir, platformTag, pythonBin) {
   ensureDir(siteDir);
 
   const pipPython = process.env.OPEN_COWORK_PIP_PYTHON || pythonBin;
-  const packageSpecs = [...BUNDLED_GUI_PACKAGES];
+  const packageSpecs = [...getBundledGuiPackages(platform)];
   const pythonRoot = path.resolve(siteDir, '..');
   const runtimeMarkerFile = resolveRuntimeVersionFile(pythonRoot);
+  const runtimeFingerprint = getBundledRuntimeFingerprint(platform);
   const runtimeMarker = exists(runtimeMarkerFile)
     ? fs.readFileSync(runtimeMarkerFile, 'utf-8').trim()
     : '';
 
   // Avoid re-install if already present
   const hasPillow = exists(path.join(siteDir, 'PIL'));
-  const hasQuartz = exists(path.join(siteDir, 'Quartz'));
-  if (hasPillow && hasQuartz && runtimeMarker === BUNDLED_RUNTIME_FINGERPRINT) {
+  const requiresQuartz = packageSpecs.includes('pyobjc-framework-Quartz');
+  const hasQuartz = !requiresQuartz || exists(path.join(siteDir, 'Quartz'));
+  if (hasPillow && hasQuartz && runtimeMarker === runtimeFingerprint) {
     console.log(`✓ Python packages already present in ${siteDir}`);
     return;
   }
@@ -355,7 +369,7 @@ function installPackages(siteDir, platformTag, pythonBin) {
     `${packageSpecs.map((pkg) => JSON.stringify(pkg)).join(' ')}`;
 
   execSync(cmd, { stdio: 'inherit' });
-  fs.writeFileSync(runtimeMarkerFile, BUNDLED_RUNTIME_FINGERPRINT, 'utf-8');
+  fs.writeFileSync(runtimeMarkerFile, runtimeFingerprint, 'utf-8');
 }
 
 /**
@@ -365,15 +379,23 @@ function installPackages(siteDir, platformTag, pythonBin) {
  * (litellm, google-cloud, grpc, etc.) that we don't need. We only keep the
  * packages required for GUI automation (PIL, pyobjc/Quartz).
  */
-function cleanPythonRuntime(destDir, siteDir) {
+function cleanPythonRuntime(platform, destDir, siteDir) {
   console.log(`🧹 Cleaning Python runtime to reduce bundle size...`);
 
   // --- 1. Clean site-packages: keep only whitelisted packages ---
-  const SITE_PACKAGES_WHITELIST = new Set([
+  const commonWhitelist = [
     'PIL', 'Pillow', 'Pillow.libs',
+  ];
+  const platformWhitelist = platform === 'darwin'
+    ? [
     'Quartz', 'AppKit', 'Foundation', 'CoreFoundation',
     'objc', 'PyObjCTools',
     'pyobjc_core', 'pyobjc_framework_Cocoa', 'pyobjc_framework_Quartz',
+      ]
+    : [];
+  const SITE_PACKAGES_WHITELIST = new Set([
+    ...commonWhitelist,
+    ...platformWhitelist,
   ]);
 
   // Match package dirs and their .dist-info counterparts
@@ -508,16 +530,16 @@ async function preparePlatformArch(platform, arch) {
     }
 
     // Clean up Python runtime (remove unnecessary stdlib modules, Tcl/Tk, etc.)
-    cleanPythonRuntime(destDir, siteDir);
+    cleanPythonRuntime(platform, destDir, siteDir);
   } else {
     console.log(`✓ Standalone Python already present: ${pythonBin}`);
   }
 
   // Install packages for GUI automation
-  installPackages(siteDir, target.platformTag, pythonBin);
+  installPackages(platform, siteDir, target.platformTag, pythonBin);
 
   // Clean site-packages of non-whitelisted packages (also runs after pip install)
-  cleanPythonRuntime(destDir, siteDir);
+  cleanPythonRuntime(platform, destDir, siteDir);
 }
 
 async function main() {
