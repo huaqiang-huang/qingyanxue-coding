@@ -10,7 +10,6 @@ import * as os from 'os';
 import * as path from 'path';
 import { spawn } from 'child_process';
 import { log } from '../utils/logger';
-import { isPathWithinRoot } from '../tools/path-containment';
 import type { SandboxConfig, SandboxExecutor, ExecutionResult, DirectoryEntry } from './types';
 
 /**
@@ -38,7 +37,7 @@ export class NativeExecutor implements SandboxExecutor {
   }
 
   /**
-   * Validate that a path is within the workspace
+   * Normalize a host path while still resolving symlinks when the target exists.
    */
   private validatePath(targetPath: string): string {
     if (!this.workspacePath) {
@@ -46,40 +45,20 @@ export class NativeExecutor implements SandboxExecutor {
     }
 
     const resolved = path.resolve(targetPath);
-    const normalizedWorkspace = path.normalize(this.workspacePath);
-    const normalizedTarget = path.normalize(resolved);
-
-    // Handle case-insensitive comparison on Windows
-    const isWindows = process.platform === 'win32';
-    const workspaceCheck = isWindows ? normalizedWorkspace.toLowerCase() : normalizedWorkspace;
-    const targetCheck = isWindows ? normalizedTarget.toLowerCase() : normalizedTarget;
-
-    if (!isPathWithinRoot(targetCheck, workspaceCheck, isWindows)) {
-      throw new Error(`Path is outside workspace: ${resolved}`);
+    try {
+      return fs.existsSync(resolved) ? fs.realpathSync(resolved) : path.normalize(resolved);
+    } catch {
+      return path.normalize(resolved);
     }
-
-    // Check for symlink escapes
-    if (fs.existsSync(resolved)) {
-      const realPath = fs.realpathSync(resolved);
-      const realCheck = isWindows ? realPath.toLowerCase() : realPath;
-      if (!isPathWithinRoot(realCheck, workspaceCheck, isWindows)) {
-        throw new Error(`Symlink escape detected: ${resolved} -> ${realPath}`);
-      }
-    }
-
-    return resolved;
   }
 
   /**
    * Validate command for dangerous patterns
    */
   private validateCommand(command: string, cwd: string): void {
-    // Validate cwd
-    this.validatePath(cwd);
-
-    // Block path traversal
-    if (/(?:^|[\s;|&])\.\.(?:[\s;|&/\\]|$)/.test(command)) {
-      throw new Error('Path traversal detected in command');
+    const normalizedCwd = this.validatePath(cwd);
+    if (!fs.existsSync(normalizedCwd)) {
+      throw new Error(`Working directory not found: ${cwd}`);
     }
 
     // Block dangerous patterns

@@ -10,14 +10,29 @@ vi.mock('electron', () => ({
 
 import { MCPManager } from '../src/main/mcp/mcp-manager';
 
+type MockCallTool = ReturnType<typeof vi.fn>;
+type InternalTestTool = {
+  name: string;
+  description: string;
+  inputSchema: { type: 'object'; properties: Record<string, unknown> };
+  serverId: string;
+  serverName: string;
+};
+type ManagerTestInternals = MCPManager & {
+  clients: Map<string, { callTool: MockCallTool }>;
+  tools: Map<string, InternalTestTool>;
+  reconnectServer: MockCallTool;
+};
+
 function createManagerWithTool(toolName: string) {
   const manager = new MCPManager();
   const mockClient = {
     callTool: vi.fn().mockResolvedValue({ ok: true }),
-  } as any;
+  };
+  const internals = manager as unknown as ManagerTestInternals;
 
-  (manager as any).clients = new Map([['server-1', mockClient]]);
-  (manager as any).tools = new Map([
+  internals.clients = new Map([['server-1', mockClient]]);
+  internals.tools = new Map([
     [
       toolName,
       {
@@ -30,7 +45,7 @@ function createManagerWithTool(toolName: string) {
     ],
   ]);
 
-  return { manager, mockClient };
+  return { manager, mockClient, internals };
 }
 
 describe('MCP tool name parsing', () => {
@@ -73,10 +88,11 @@ describe('MCP tool name parsing', () => {
           ],
         })
         .mockResolvedValueOnce({ ok: true }),
-    } as any;
+    };
+    const internals = manager as unknown as ManagerTestInternals;
 
-    (manager as any).clients = new Map([['server-1', mockClient]]);
-    (manager as any).tools = new Map([
+    internals.clients = new Map([['server-1', mockClient]]);
+    internals.tools = new Map([
       [
         toolName,
         {
@@ -88,11 +104,11 @@ describe('MCP tool name parsing', () => {
         },
       ],
     ]);
-    (manager as any).reconnectServer = vi.fn().mockResolvedValue(true);
+    internals.reconnectServer = vi.fn().mockResolvedValue(true);
 
     const result = await manager.callTool(toolName, { display_index: 0 });
 
-    expect((manager as any).reconnectServer).toHaveBeenCalledWith('server-1');
+    expect(internals.reconnectServer).toHaveBeenCalledWith('server-1');
     expect(mockClient.callTool).toHaveBeenCalledTimes(2);
     expect(result).toEqual({ ok: true });
   });
@@ -109,10 +125,11 @@ describe('MCP tool name parsing', () => {
           },
         ],
       }),
-    } as any;
+    };
+    const internals = manager as unknown as ManagerTestInternals;
 
-    (manager as any).clients = new Map([['server-1', mockClient]]);
-    (manager as any).tools = new Map([
+    internals.clients = new Map([['server-1', mockClient]]);
+    internals.tools = new Map([
       [
         toolName,
         {
@@ -124,11 +141,11 @@ describe('MCP tool name parsing', () => {
         },
       ],
     ]);
-    (manager as any).reconnectServer = vi.fn().mockResolvedValue(true);
+    internals.reconnectServer = vi.fn().mockResolvedValue(true);
 
     const result = await manager.callTool(toolName, { display_index: 0 });
 
-    expect((manager as any).reconnectServer).not.toHaveBeenCalled();
+    expect(internals.reconnectServer).not.toHaveBeenCalled();
     expect(mockClient.callTool).toHaveBeenCalledTimes(1);
     expect(result).toEqual({
       content: [
@@ -138,5 +155,42 @@ describe('MCP tool name parsing', () => {
         },
       ],
     });
+  });
+
+  it('reconnects only once after a tool timeout and then succeeds', async () => {
+    vi.useFakeTimers();
+    const toolName = 'mcp__Chrome__navigate';
+    const manager = new MCPManager();
+    const neverSettles = new Promise(() => {
+      /* intentional */
+    });
+    const mockClient = {
+      callTool: vi.fn().mockReturnValueOnce(neverSettles).mockResolvedValueOnce({ ok: true }),
+    };
+    const internals = manager as unknown as ManagerTestInternals;
+
+    internals.clients = new Map([['server-1', mockClient]]);
+    internals.tools = new Map([
+      [
+        toolName,
+        {
+          name: toolName,
+          description: '',
+          inputSchema: { type: 'object', properties: {} },
+          serverId: 'server-1',
+          serverName: 'Chrome',
+        },
+      ],
+    ]);
+    internals.reconnectServer = vi.fn().mockResolvedValue(true);
+
+    const promise = manager.callTool(toolName, { url: 'https://example.com' });
+    await vi.advanceTimersByTimeAsync(30000);
+    await Promise.resolve();
+
+    await expect(promise).resolves.toEqual({ ok: true });
+    expect(internals.reconnectServer).toHaveBeenCalledTimes(1);
+    expect(mockClient.callTool).toHaveBeenCalledTimes(2);
+    vi.useRealTimers();
   });
 });

@@ -1399,12 +1399,11 @@ ${hints.join('\n')}
       // Always honor explicit user overrides, even for registry-resolved models.
       // Without this, the settings panel may show a manual value like 256000
       // while the runtime/UI sidebar still falls back to the model default.
-      const effectiveContextWindow =
-        runtimeConfig.contextWindow || piModel.contextWindow || 128000;
+      const effectiveContextWindow = runtimeConfig.contextWindow || piModel.contextWindow || 128000;
       const effectiveMaxTokens = runtimeConfig.maxTokens || piModel.maxTokens || 16384;
       if (
-        piModel.contextWindow !== effectiveContextWindow
-        || piModel.maxTokens !== effectiveMaxTokens
+        piModel.contextWindow !== effectiveContextWindow ||
+        piModel.maxTokens !== effectiveMaxTokens
       ) {
         piModel = {
           ...piModel,
@@ -1804,10 +1803,12 @@ ${hints.join('\n')}
         useSandboxIsolation && sandboxPath
           ? `<workspace_info>
 Your current workspace is located at: ${VIRTUAL_WORKSPACE_PATH}
-This is an isolated sandbox environment. Use ${VIRTUAL_WORKSPACE_PATH} as the root path for file operations.
+This is an isolated sandbox environment. Use ${VIRTUAL_WORKSPACE_PATH} as your default working directory.
+You may access other filesystem paths when the task requires it; the selected workspace is a starting point, not a hard access boundary.
 </workspace_info>`
           : workingDir
-            ? `<workspace_info>Your current workspace is: ${workingDir}</workspace_info>`
+            ? `<workspace_info>Your current workspace is: ${workingDir}
+Use it as the default working directory, but you may access other filesystem paths when needed.</workspace_info>`
             : '';
 
       const coworkAppendPrompt = [
@@ -1827,7 +1828,9 @@ This is an isolated sandbox environment. Use ${VIRTUAL_WORKSPACE_PATH} as the ro
 12. For relative time windows like "within two days" in browsing or research tasks, assume the most recent two relevant publication days unless the user explicitly defines another date range.
 13. For bracketed placeholders like [Agent], [Topic], etc., treat the word inside brackets as the literal search keyword unless the user says otherwise.
 14. After changing files or running mutation-heavy commands, prefer at least one verification step before ending the turn.
-15. If a tool call fails, inspect the error and retry once with a narrower or corrected command before asking the user for help.`,
+15. If a tool call fails, inspect the error and retry once with a narrower or corrected command before asking the user for help.
+16. Treat ENOENT, "file not found", "directory not found", and "path not found" as missing-path errors by default, not as proof of permission or sandbox restrictions.
+17. Paths inside .asar archives are packaged application resources, not normal folders on disk. If such a path fails, explain it as a packaged-path or missing-file issue unless the tool explicitly reports a permission denial.`,
         workspaceInfoPrompt,
         `<citation_requirements>
 If your answer uses linkable content from MCP tools, include a "Sources:" section and otherwise use standard Markdown links: [Title](https://claude.ai/chat/URL).
@@ -2194,7 +2197,7 @@ Tool routing:
                 const toolCallId = toolContent?.type === 'toolCall' ? toolContent.id : uuidv4();
                 const toolInput =
                   toolContent?.type === 'toolCall'
-                    ? ((toolContent.arguments as Record<string, unknown>) || {})
+                    ? (toolContent.arguments as Record<string, unknown>) || {}
                     : undefined;
                 const classification = classifyToolCall(toolName, toolInput);
                 this.sendTraceStep(session.id, {

@@ -1,6 +1,6 @@
 {
   "name": "qingyanxue-coding",
-  "version": "3.3.0",
+  "version": "3.3.6",
   "description": "Codex-style AI coding agent desktop app for Windows, macOS, and Linux with one-click install, MCP tools, Skills, sandbox isolation, and multi-model support",
   "keywords": [
     "ai-agent",
@@ -41,6 +41,8 @@
     "dev:with-python": "npm run download:node && npm run prepare:python && npm run build:wsl-agent && npm run build:lima-agent && npm run build:mcp && vite",
     "build": "node scripts/build-desktop.js",
     "build:mac": "node scripts/build-desktop.js --mac dmg dir",
+    "install:mac-local": "node scripts/install-built-mac-app.js",
+    "release:mac-local": "npm version patch --no-git-tag-version && npm run build:mac && npm run install:mac-local",
     "build:win": "node scripts/build-desktop.js --win nsis",
     "build:linux": "node scripts/build-desktop.js --linux AppImage",
     "build:win:legacy": "node scripts/build-windows.js",

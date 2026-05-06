@@ -864,6 +864,12 @@ export class ConfigStore {
       enableThinking: projected.enableThinking,
       isConfigured: toBoolean(raw.isConfigured, defaultConfig.isConfigured),
     };
+    if (typeof projected.contextWindow === 'number' && projected.contextWindow > 0) {
+      result.contextWindow = projected.contextWindow;
+    }
+    if (typeof projected.maxTokens === 'number' && projected.maxTokens > 0) {
+      result.maxTokens = projected.maxTokens;
+    }
     this.normalizeModelIds(result);
     return result;
   }
@@ -889,7 +895,7 @@ export class ConfigStore {
     const activeConfigSet =
       nextConfigSets.find((set) => set.id === requestedActiveConfigSetId) || nextConfigSets[0];
     const projected = this.projectFromConfigSet(activeConfigSet);
-    return {
+    const projectedConfig: AppConfig = {
       ...base,
       provider: projected.provider,
       customProtocol: projected.customProtocol,
@@ -902,6 +908,17 @@ export class ConfigStore {
       activeConfigSetId: activeConfigSet.id,
       configSets: nextConfigSets,
     };
+    if (typeof projected.contextWindow === 'number' && projected.contextWindow > 0) {
+      projectedConfig.contextWindow = projected.contextWindow;
+    } else {
+      delete projectedConfig.contextWindow;
+    }
+    if (typeof projected.maxTokens === 'number' && projected.maxTokens > 0) {
+      projectedConfig.maxTokens = projected.maxTokens;
+    } else {
+      delete projectedConfig.maxTokens;
+    }
+    return projectedConfig;
   }
 
   private buildUniqueConfigSetName(
@@ -1188,6 +1205,8 @@ export class ConfigStore {
       updates.apiKey !== undefined ||
       updates.baseUrl !== undefined ||
       updates.model !== undefined ||
+      updates.contextWindow !== undefined ||
+      updates.maxTokens !== undefined ||
       updates.enableThinking !== undefined;
 
     if (mutatesActiveSet) {
@@ -1235,6 +1254,18 @@ export class ConfigStore {
       if (updates.model !== undefined) {
         const model = updates.model?.trim();
         nextActiveProfile.model = model ?? '';
+      }
+      if (updates.contextWindow !== undefined) {
+        nextActiveProfile.contextWindow =
+          typeof updates.contextWindow === 'number' && updates.contextWindow > 0
+            ? updates.contextWindow
+            : undefined;
+      }
+      if (updates.maxTokens !== undefined) {
+        nextActiveProfile.maxTokens =
+          typeof updates.maxTokens === 'number' && updates.maxTokens > 0
+            ? updates.maxTokens
+            : undefined;
       }
       nextProfiles[nextActiveProfileKey] = this.normalizeProfile(
         nextActiveProfileKey,

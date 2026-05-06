@@ -4,9 +4,9 @@ import * as path from 'path';
 import { spawn } from 'child_process';
 import { glob } from 'glob';
 import { PathResolver } from '../sandbox/path-resolver';
-import type { ToolResult, ExecutionContext, MountedPath } from '../../renderer/types';
+import type { ToolResult, ExecutionContext } from '../../renderer/types';
 import { isUncPath } from '../../shared/local-file-path';
-import { isPathWithinRoot } from './path-containment';
+import { normalizeFilesystemErrorMessage } from './filesystem-error-utils';
 
 /**
  * ToolExecutor - Secure tool execution framework
@@ -21,9 +21,9 @@ export class ToolExecutor {
   }
 
   /**
-   * Resolve a user-provided path to a real path within the mounted workspace.
-   * Accepts virtual paths (/mnt/...), absolute paths inside a mount, or
-   * relative paths (treated as relative to the first mount root).
+   * Resolve a user-provided path to a real host path.
+   * The selected workdir acts as the default cwd for relative paths, but it no
+   * longer limits access to other absolute paths on the host filesystem.
    */
   private resolveWorkspacePath(sessionId: string, inputPath: string): string {
     const mounts = this.pathResolver.getMounts(sessionId);
@@ -35,54 +35,40 @@ export class ToolExecutor {
     const normalizedPrimary = path.normalize(primaryMount.real);
     const trimmed = inputPath.trim();
 
-    // If virtual (/mnt/...), resolve via PathResolver
-    if (trimmed.startsWith('/')) {
+    const isVirtualPath =
+      trimmed === '/workspace' ||
+      trimmed.startsWith('/workspace/') ||
+      mounts.some((mount) => trimmed === mount.virtual || trimmed.startsWith(`${mount.virtual}/`));
+
+    // Virtual workspace aliases still resolve through the session mount table.
+    if (isVirtualPath) {
       const resolved = this.pathResolver.resolve(sessionId, trimmed);
       if (!resolved) {
         throw new Error('Invalid or unauthorized path');
       }
-      return this.assertInsideMount(resolved, mounts);
+      return this.normalizeAccessiblePath(resolved);
     }
 
-    // If absolute real path, ensure it lies within a mount
     const isAbsolute = path.isAbsolute(trimmed) || /^[a-zA-Z]:/.test(trimmed) || isUncPath(trimmed);
     if (isAbsolute) {
-      const absolutePath = path.normalize(trimmed);
-      return this.assertInsideMount(absolutePath, mounts);
+      return this.normalizeAccessiblePath(trimmed);
     }
 
-    // Relative path: join to primary mount root
+    // Relative path: join to primary workdir
     const candidate = path.normalize(path.join(normalizedPrimary, trimmed || '.'));
-    return this.assertInsideMount(candidate, mounts);
+    return this.normalizeAccessiblePath(candidate);
   }
 
   /**
-   * Ensure a path is inside at least one mount and guard against traversal/symlink escapes.
+   * Normalize a host path while still resolving symlinks when the target exists.
    */
-  private assertInsideMount(targetPath: string, mounts: MountedPath[]): string {
+  private normalizeAccessiblePath(targetPath: string): string {
     const normalizedTarget = path.normalize(targetPath);
-    const isWindows = process.platform === 'win32';
-
-    // Symlink resolve if exists; fall back to normalizedTarget on error
-    let realPath: string;
     try {
-      realPath = fs.existsSync(normalizedTarget)
-        ? fs.realpathSync(normalizedTarget)
-        : normalizedTarget;
+      return fs.existsSync(normalizedTarget) ? fs.realpathSync(normalizedTarget) : normalizedTarget;
     } catch {
-      realPath = normalizedTarget;
+      return normalizedTarget;
     }
-
-    const allowed = mounts.some((m) => {
-      const mountRoot = path.normalize(m.real);
-      return isPathWithinRoot(realPath, mountRoot, isWindows);
-    });
-
-    if (!allowed) {
-      throw new Error('Path is outside the mounted workspace');
-    }
-
-    return realPath;
   }
 
   /**
@@ -98,9 +84,7 @@ export class ToolExecutor {
 
       return fs.readFileSync(pathToRead, 'utf-8');
     } catch (error) {
-      throw new Error(
-        `Failed to read file: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      throw new Error(normalizeFilesystemErrorMessage('read', filePath, error));
     }
   }
 
@@ -119,9 +103,7 @@ export class ToolExecutor {
 
       fs.writeFileSync(pathToWrite, content, 'utf-8');
     } catch (error) {
-      throw new Error(
-        `Failed to write file: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      throw new Error(normalizeFilesystemErrorMessage('write', filePath, error));
     }
   }
 
@@ -149,9 +131,7 @@ export class ToolExecutor {
 
       return result.length > 0 ? result.join('\n') : 'Directory is empty';
     } catch (error) {
-      throw new Error(
-        `Failed to list directory: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      throw new Error(normalizeFilesystemErrorMessage('list', dirPath, error));
     }
   }
 
@@ -292,10 +272,8 @@ export class ToolExecutor {
   }
 
   /**
-   * Validate that a command does not escape the sandbox.
-   * - Blocks absolute paths outside mounts
-   * - Blocks path traversal (..)
-   * - Validates cwd is inside mount
+   * Validate that a command does not perform obviously dangerous operations.
+   * The selected workdir is treated as the execution cwd, not as a filesystem boundary.
    */
   private validateCommandSandbox(sessionId: string, command: string, cwd: string): void {
     const mounts = this.pathResolver.getMounts(sessionId);
@@ -303,66 +281,9 @@ export class ToolExecutor {
       throw new Error('No mounted workspace for this session');
     }
 
-    // Validate cwd is inside a mount
-    const normalizedCwd = path.normalize(cwd);
-    const cwdAllowed = mounts.some((m) => {
-      const mountRoot = path.normalize(m.real);
-      return isPathWithinRoot(normalizedCwd, mountRoot);
-    });
-    if (!cwdAllowed) {
-      throw new Error('Working directory is outside the mounted workspace');
-    }
-
-    // Block path traversal attempts
-    if (
-      // eslint-disable-next-line no-useless-escape
-      /(?:^|[\s;|&])\.\.(?:[\s;|&\/\\]|$)/.test(command) ||
-      command.includes('../') ||
-      command.includes('..\\')
-    ) {
-      throw new Error('Command blocked: path traversal (..) is not allowed');
-    }
-
-    // Extract potential paths from command (quoted strings and unquoted tokens)
-    const pathPatterns = [
-      // Windows absolute paths: C:\... or C:/...
-      // eslint-disable-next-line no-useless-escape
-      /[A-Za-z]:[\\\/][^\s;|&"'<>]*/g,
-      // UNC absolute paths: \\server\share\...
-      /\\\\[^\s;|&"'<>]+/g,
-      // Unix absolute paths: /...
-      /(?:^|[\s;|&"'])\/[^\s;|&"'<>]+/g,
-      // Quoted paths
-      /"([^"]+)"/g,
-      /'([^']+)'/g,
-    ];
-
-    const extractedPaths: string[] = [];
-    for (const pattern of pathPatterns) {
-      let match;
-      const testStr = command;
-      pattern.lastIndex = 0;
-      while ((match = pattern.exec(testStr)) !== null) {
-        const p = match[1] || match[0];
-        const trimmed = p.trim().replace(/^["'\s]+|["'\s]+$/g, '');
-        if (trimmed) extractedPaths.push(trimmed);
-      }
-    }
-
-    // Validate each extracted path
-    for (const p of extractedPaths) {
-      const isAbsolute = path.isAbsolute(p) || /^[A-Za-z]:/.test(p) || isUncPath(p);
-      if (!isAbsolute) continue; // Relative paths are fine (confined by cwd)
-
-      const normalizedPath = path.normalize(p);
-      const allowed = mounts.some((m) => {
-        const mountRoot = path.normalize(m.real);
-        return isPathWithinRoot(normalizedPath, mountRoot);
-      });
-
-      if (!allowed) {
-        throw new Error(`Command blocked: path "${p}" is outside the mounted workspace`);
-      }
+    const normalizedCwd = this.resolveWorkspacePath(sessionId, cwd);
+    if (!fs.existsSync(normalizedCwd)) {
+      throw new Error(`Working directory not found: ${cwd}`);
     }
 
     // Block dangerous patterns
@@ -396,6 +317,7 @@ export class ToolExecutor {
   async executeCommand(sessionId: string, command: string, cwd: string): Promise<string> {
     // Sandbox validation
     this.validateCommandSandbox(sessionId, command, cwd);
+    const resolvedCwd = this.resolveWorkspacePath(sessionId, cwd);
 
     return new Promise((resolve, reject) => {
       // On Windows prefer PowerShell with UTF-8 codepage to reduce quoting/encoding issues
@@ -426,7 +348,7 @@ export class ToolExecutor {
         USER: process.env.USER,
       };
       const proc = spawn(shell, args, {
-        cwd,
+        cwd: resolvedCwd,
         env: { ...safeEnv },
         timeout: 60000, // 60 second timeout
       });
@@ -508,7 +430,7 @@ export class ToolExecutor {
         return files.length > 0 ? files.slice(0, 100).join('\n') : 'No files found';
       }
     } catch (error) {
-      throw new Error(`Search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(normalizeFilesystemErrorMessage('search', searchPath, error));
     }
   }
 
@@ -537,7 +459,7 @@ export class ToolExecutor {
       const newContent = content.split(oldString).join(newString);
       fs.writeFileSync(resolvedPath, newContent, 'utf-8');
     } catch (error) {
-      throw new Error(`Edit failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(normalizeFilesystemErrorMessage('edit', filePath, error));
     }
   }
 
@@ -565,7 +487,7 @@ export class ToolExecutor {
 
       return files.length > 0 ? files.slice(0, 100).join('\n') : 'No files found';
     } catch (error) {
-      throw new Error(`Glob failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(normalizeFilesystemErrorMessage('glob', searchPath, error));
     }
   }
 
@@ -596,7 +518,7 @@ export class ToolExecutor {
 
       return results.length > 0 ? results.slice(0, 50).join('\n') : 'No matches found';
     } catch (error) {
-      throw new Error(`Grep failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(normalizeFilesystemErrorMessage('grep', searchPath, error));
     }
   }
 
@@ -716,10 +638,7 @@ export class ToolExecutor {
    */
   private async read(virtualPath: string, context: ExecutionContext): Promise<ToolResult> {
     try {
-      const realPath = this.pathResolver.resolve(context.sessionId, virtualPath);
-      if (!realPath) {
-        return { success: false, error: 'Invalid or unauthorized path' };
-      }
+      const realPath = this.resolveWorkspacePath(context.sessionId, virtualPath);
 
       const content = fs.readFileSync(realPath, 'utf-8');
       return { success: true, output: content };
@@ -740,10 +659,7 @@ export class ToolExecutor {
     context: ExecutionContext
   ): Promise<ToolResult> {
     try {
-      const realPath = this.pathResolver.resolve(context.sessionId, virtualPath);
-      if (!realPath) {
-        return { success: false, error: 'Invalid or unauthorized path' };
-      }
+      const realPath = this.resolveWorkspacePath(context.sessionId, virtualPath);
 
       const dir = path.dirname(realPath);
       if (!fs.existsSync(dir)) {
@@ -770,10 +686,7 @@ export class ToolExecutor {
     context: ExecutionContext
   ): Promise<ToolResult> {
     try {
-      const realPath = this.pathResolver.resolve(context.sessionId, virtualPath);
-      if (!realPath) {
-        return { success: false, error: 'Invalid or unauthorized path' };
-      }
+      const realPath = this.resolveWorkspacePath(context.sessionId, virtualPath);
 
       const content = fs.readFileSync(realPath, 'utf-8');
 

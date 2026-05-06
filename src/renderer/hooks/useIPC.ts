@@ -148,6 +148,13 @@ export function useIPC() {
             // Clear thinking buffer too — final thinking is in the message content blocks
             delete pendingThinking[event.payload.sessionId];
             store.addMessage(event.payload.sessionId, event.payload.message);
+            if (
+              event.payload.message.role === 'assistant' &&
+              Array.isArray(event.payload.message.content) &&
+              event.payload.message.content.some((block) => block.type !== 'tool_result')
+            ) {
+              store.clearActiveTurn(event.payload.sessionId);
+            }
             break;
 
           case 'stream.partial':
@@ -268,9 +275,22 @@ export function useIPC() {
             store.setSessionContextWindow(event.payload.sessionId, event.payload.contextWindow);
             break;
 
+          case 'mcp:tools-refresh-error':
+            store.setGlobalNotice({
+              id: `notice-mcp-tools-refresh-${event.payload.serverId}-${Date.now()}`,
+              type: 'warning',
+              message: `MCP 工具刷新失败（${event.payload.serverId}）：${event.payload.error}`,
+            });
+            break;
+
           case 'error':
             console.error('[useIPC] Server error:', event.payload.message);
             store.setLoading(false);
+            if (store.activeSessionId) {
+              store.clearActiveTurn(store.activeSessionId);
+              store.clearPendingTurns(store.activeSessionId);
+              store.clearQueuedMessages(store.activeSessionId);
+            }
             if (event.payload.code === 'CONFIG_REQUIRED_ACTIVE_SET') {
               store.setGlobalNotice({
                 id: `notice-config-required-${Date.now()}`,

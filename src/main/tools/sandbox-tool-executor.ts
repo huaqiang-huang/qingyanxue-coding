@@ -11,9 +11,9 @@ import { glob } from 'glob';
 import { SandboxAdapter, getSandboxAdapter } from '../sandbox/sandbox-adapter';
 import { PathResolver } from '../sandbox/path-resolver';
 // Logger imports removed - using sandbox adapter's internal logging
-import type { ToolResult, ExecutionContext, MountedPath } from '../../renderer/types';
+import type { ToolResult, ExecutionContext } from '../../renderer/types';
 import { isUncPath } from '../../shared/local-file-path';
-import { isPathWithinRoot } from './path-containment';
+import { normalizeFilesystemErrorMessage } from './filesystem-error-utils';
 
 /**
  * SandboxToolExecutor - Executes tools through the sandbox
@@ -28,7 +28,9 @@ export class SandboxToolExecutor {
   }
 
   /**
-   * Resolve a user-provided path to a real path within the mounted workspace.
+   * Resolve a user-provided path to a real host path.
+   * The selected workdir stays the default cwd for relative paths, but it is no
+   * longer enforced as the only accessible root.
    */
   private resolveWorkspacePath(sessionId: string, inputPath: string): string {
     const mounts = this.pathResolver.getMounts(sessionId);
@@ -40,56 +42,39 @@ export class SandboxToolExecutor {
     const normalizedPrimary = path.normalize(primaryMount.real);
     const trimmed = inputPath.trim();
 
-    // If virtual (/mnt/...), resolve via PathResolver
-    if (trimmed.startsWith('/')) {
+    const isVirtualPath =
+      trimmed === '/workspace' ||
+      trimmed.startsWith('/workspace/') ||
+      mounts.some((mount) => trimmed === mount.virtual || trimmed.startsWith(`${mount.virtual}/`));
+
+    if (isVirtualPath) {
       const resolved = this.pathResolver.resolve(sessionId, trimmed);
       if (!resolved) {
         throw new Error('Invalid or unauthorized path');
       }
-      return this.assertInsideMount(resolved, mounts);
+      return this.normalizeAccessiblePath(resolved);
     }
 
-    // If absolute real path, ensure it lies within a mount
     const isAbsolute = path.isAbsolute(trimmed) || /^[a-zA-Z]:/.test(trimmed) || isUncPath(trimmed);
     if (isAbsolute) {
-      const absolutePath = path.normalize(trimmed);
-      return this.assertInsideMount(absolutePath, mounts);
+      return this.normalizeAccessiblePath(trimmed);
     }
 
-    // Relative path: join to primary mount root
+    // Relative path: join to primary workdir
     const candidate = path.normalize(path.join(normalizedPrimary, trimmed || '.'));
-    return this.assertInsideMount(candidate, mounts);
+    return this.normalizeAccessiblePath(candidate);
   }
 
   /**
-   * Ensure a path is inside at least one mount.
+   * Normalize a host path while still resolving symlinks when the target exists.
    */
-  private assertInsideMount(targetPath: string, mounts: MountedPath[]): string {
+  private normalizeAccessiblePath(targetPath: string): string {
     const normalizedTarget = path.normalize(targetPath);
-    const isWindows = process.platform === 'win32';
-
-    // Resolve symlinks if the path exists to prevent symlink escape attacks
-    let realPath: string;
     try {
-      realPath = fs.realpathSync(normalizedTarget);
+      return fs.existsSync(normalizedTarget) ? fs.realpathSync(normalizedTarget) : normalizedTarget;
     } catch {
-      // Path doesn't exist yet (e.g. write target), use normalized path
-      realPath = normalizedTarget;
+      return normalizedTarget;
     }
-
-    // Compare paths (case-insensitive on Windows)
-    const targetLower = isWindows ? realPath.toLowerCase() : realPath;
-
-    const allowed = mounts.some((m) => {
-      const mountRoot = path.normalize(m.real);
-      return isPathWithinRoot(targetLower, mountRoot, isWindows);
-    });
-
-    if (!allowed) {
-      throw new Error('Path is outside the mounted workspace');
-    }
-
-    return realPath;
   }
 
   /**
@@ -100,9 +85,7 @@ export class SandboxToolExecutor {
       const pathToRead = this.resolveWorkspacePath(sessionId, filePath);
       return await this.sandboxAdapter.readFile(pathToRead);
     } catch (error) {
-      throw new Error(
-        `Failed to read file: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      throw new Error(normalizeFilesystemErrorMessage('read', filePath, error));
     }
   }
 
@@ -122,9 +105,7 @@ export class SandboxToolExecutor {
 
       await this.sandboxAdapter.writeFile(pathToWrite, content);
     } catch (error) {
-      throw new Error(
-        `Failed to write file: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      throw new Error(normalizeFilesystemErrorMessage('write', filePath, error));
     }
   }
 
@@ -146,9 +127,7 @@ export class SandboxToolExecutor {
 
       return result.length > 0 ? result.join('\n') : 'Directory is empty';
     } catch (error) {
-      throw new Error(
-        `Failed to list directory: ${error instanceof Error ? error.message : 'Unknown error'}`
-      );
+      throw new Error(normalizeFilesystemErrorMessage('list', dirPath, error));
     }
   }
 
@@ -195,7 +174,7 @@ export class SandboxToolExecutor {
       const newContent = content.split(oldString).join(newString);
       await this.sandboxAdapter.writeFile(resolvedPath, newContent);
     } catch (error) {
-      throw new Error(`Edit failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(normalizeFilesystemErrorMessage('edit', filePath, error));
     }
   }
 
@@ -237,7 +216,7 @@ export class SandboxToolExecutor {
         return files.length > 0 ? files.slice(0, 100).join('\n') : 'No files found';
       }
     } catch (error) {
-      throw new Error(`Search failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(normalizeFilesystemErrorMessage('search', searchPath, error));
     }
   }
 
@@ -256,7 +235,7 @@ export class SandboxToolExecutor {
 
       return files.length > 0 ? files.slice(0, 100).join('\n') : 'No files found';
     } catch (error) {
-      throw new Error(`Glob failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(normalizeFilesystemErrorMessage('glob', searchPath, error));
     }
   }
 
@@ -281,7 +260,7 @@ export class SandboxToolExecutor {
 
       return results.length > 0 ? results.slice(0, 50).join('\n') : 'No matches found';
     } catch (error) {
-      throw new Error(`Grep failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(normalizeFilesystemErrorMessage('grep', searchPath, error));
     }
   }
 

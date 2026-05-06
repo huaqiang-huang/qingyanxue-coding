@@ -269,7 +269,8 @@ export const useAppStore = create<AppState>((set) => ({
 
   removeSession: (sessionId) =>
     set((state) => {
-      const { [sessionId]: _, ...restSessionStates } = state.sessionStates;
+      const restSessionStates = { ...state.sessionStates };
+      delete restSessionStates[sessionId];
       return {
         sessions: state.sessions.filter((s) => s.id !== sessionId),
         sessionStates: restSessionStates,
@@ -516,9 +517,16 @@ export const useAppStore = create<AppState>((set) => ({
   addTraceStep: (sessionId, step) =>
     set((state) => {
       const ss = getSession(state.sessionStates, sessionId);
+      const existingIndex = ss.traceSteps.findIndex((item) => item.id === step.id);
+      const traceSteps =
+        existingIndex >= 0
+          ? ss.traceSteps.map((item, index) =>
+              index === existingIndex ? { ...item, ...step } : item
+            )
+          : [...ss.traceSteps, step];
       return {
         sessionStates: patchSession(state.sessionStates, sessionId, {
-          traceSteps: [...ss.traceSteps, step],
+          traceSteps,
         }),
       };
     }),
@@ -526,6 +534,24 @@ export const useAppStore = create<AppState>((set) => ({
   updateTraceStep: (sessionId, stepId, updates) =>
     set((state) => {
       const ss = getSession(state.sessionStates, sessionId);
+      const existingIndex = ss.traceSteps.findIndex((step) => step.id === stepId);
+      if (existingIndex === -1) {
+        return {
+          sessionStates: patchSession(state.sessionStates, sessionId, {
+            traceSteps: [
+              ...ss.traceSteps,
+              {
+                id: stepId,
+                type: 'tool_call',
+                status: 'pending',
+                title: updates.title || '',
+                timestamp: Date.now(),
+                ...updates,
+              } as TraceStep,
+            ],
+          }),
+        };
+      }
       return {
         sessionStates: patchSession(state.sessionStates, sessionId, {
           traceSteps: ss.traceSteps.map((step) =>

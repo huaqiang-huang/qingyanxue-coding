@@ -7,19 +7,23 @@ const wslAgentPath = path.resolve(process.cwd(), 'src/main/sandbox/wsl-agent/ind
 const limaAgentPath = path.resolve(process.cwd(), 'src/main/sandbox/lima-agent/index.ts');
 
 describe('Sandbox executor containment wiring', () => {
-  it('uses containment helpers instead of raw workspace prefix matching', () => {
+  it('treats workspace as default cwd instead of a hard path boundary', () => {
     const nativeSource = fs.readFileSync(nativeExecutorPath, 'utf8');
     const wslSource = fs.readFileSync(wslAgentPath, 'utf8');
     const limaSource = fs.readFileSync(limaAgentPath, 'utf8');
 
-    expect(nativeSource).toContain("import { isPathWithinRoot } from '../tools/path-containment';");
-    expect(nativeSource).toContain('isPathWithinRoot(targetCheck, workspaceCheck, isWindows)');
-    expect(nativeSource).toContain('isPathWithinRoot(realCheck, workspaceCheck, isWindows)');
+    expect(nativeSource).not.toContain(
+      "import { isPathWithinRoot } from '../tools/path-containment';"
+    );
+    expect(nativeSource).toContain('Working directory not found');
+    expect(nativeSource).toContain('Normalize a host path while still resolving symlinks');
 
-    expect(wslSource).toContain("import { isPathWithinRoot } from './path-containment';");
-    expect(wslSource).toContain('isPathWithinRoot(resolved, this.workspacePath)');
+    expect(wslSource).not.toContain("import { isPathWithinRoot } from './path-containment';");
+    expect(wslSource).toContain('Working directory not found');
+    expect(wslSource).toContain('Normalize a host path while still resolving symlinks');
 
-    expect(limaSource).toContain("import { isPathWithinRoot } from './path-containment';");
-    expect(limaSource).toContain('isPathWithinRoot(resolved, this.workspacePath)');
+    expect(limaSource).not.toContain("import { isPathWithinRoot } from './path-containment';");
+    expect(limaSource).toContain('Working directory not found');
+    expect(limaSource).toContain('Normalize a host path while still resolving symlinks');
   });
 });

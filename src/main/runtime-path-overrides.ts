@@ -4,11 +4,13 @@ import fs from 'node:fs';
 import { resolve } from 'path';
 
 const APP_DATA_DIR_NAME = 'qingyanxue-coding';
-const LEGACY_APP_DATA_DIR_NAME = 'open-cowork';
 
 function readCliArg(name: string): string | undefined {
   const prefix = `${name}=`;
-  const value = process.argv.find((arg) => arg.startsWith(prefix))?.slice(prefix.length).trim();
+  const value = process.argv
+    .find((arg) => arg.startsWith(prefix))
+    ?.slice(prefix.length)
+    .trim();
   return value ? value : undefined;
 }
 
@@ -55,21 +57,17 @@ export function getOpenCoworkAppDataDir(): string {
       return resolve(userDataPath);
     }
   } catch {
-    // Fall through to legacy-compatible default.
+    // Fall through to branded/legacy defaults when Electron userData is unavailable.
   }
 
   if (process.platform === 'darwin') {
     const base = resolve(os.homedir(), 'Library/Application Support');
-    return (
-      resolveAppDataPath(base, APP_DATA_DIR_NAME) ||
-      resolveAppDataPath(base, LEGACY_APP_DATA_DIR_NAME) ||
-      resolve(base, APP_DATA_DIR_NAME)
-    );
+    return resolveAppDataPath(base, APP_DATA_DIR_NAME) || resolve(base, APP_DATA_DIR_NAME);
   }
   if (process.platform === 'win32') {
     const base = process.env.APPDATA || resolve(os.homedir(), 'AppData/Roaming');
-    return resolveAppDataPath(base, APP_DATA_DIR_NAME) || resolveAppDataPath(base, LEGACY_APP_DATA_DIR_NAME) || resolve(base, APP_DATA_DIR_NAME);
+    return resolveAppDataPath(base, APP_DATA_DIR_NAME) || resolve(base, APP_DATA_DIR_NAME);
   }
   const base = process.env.XDG_CONFIG_HOME || resolve(os.homedir(), '.config');
-  return resolveAppDataPath(base, APP_DATA_DIR_NAME) || resolveAppDataPath(base, LEGACY_APP_DATA_DIR_NAME) || resolve(base, APP_DATA_DIR_NAME);
+  return resolveAppDataPath(base, APP_DATA_DIR_NAME) || resolve(base, APP_DATA_DIR_NAME);
 }

@@ -26,12 +26,7 @@ import type {
 } from '../../renderer/types';
 import type { DatabaseInstance, TraceStepRow } from '../db/database';
 import { PathResolver } from '../sandbox/path-resolver';
-import {
-  SandboxAdapter,
-  getSandboxAdapter,
-  initializeSandbox,
-  reinitializeSandbox,
-} from '../sandbox/sandbox-adapter';
+import { SandboxAdapter, getSandboxAdapter, reinitializeSandbox } from '../sandbox/sandbox-adapter';
 import { SandboxSync } from '../sandbox/sandbox-sync';
 import { ClaudeAgentRunner } from '../claude/agent-runner';
 import { configStore } from '../config/config-store';
@@ -83,7 +78,8 @@ export class SessionManager {
     string,
     { sessionId: string; resolve: (password: string | null) => void }
   > = new Map();
-  private sandboxInitPromises: Map<string, Promise<void>> = new Map();
+  private sandboxInitPromise: Promise<void> | null = null;
+  private sandboxInitWorkspace: string | null = null;
   private sessionTitleAttempts: Set<string> = new Set();
   private titleGenerationTokens: Map<string, symbol> = new Map();
   private messageCache: Map<string, Message[]> = new Map();
@@ -192,6 +188,8 @@ export class SessionManager {
   private async reinitializeSandboxAsync(): Promise<void> {
     try {
       log('[SessionManager] Reinitializing sandbox adapter...');
+      this.sandboxInitPromise = null;
+      this.sandboxInitWorkspace = null;
       await reinitializeSandbox();
       this.sandboxAdapter = getSandboxAdapter();
       log('[SessionManager] Sandbox adapter reinitialized, mode:', this.sandboxAdapter.mode);
@@ -437,25 +435,28 @@ export class SessionManager {
       return;
     }
 
-    // Check if initialization is already in progress
-    const existingPromise = this.sandboxInitPromises.get(session.cwd);
-    if (existingPromise) {
-      await existingPromise;
-      return;
+    if (this.sandboxInitPromise) {
+      if (this.sandboxInitWorkspace === session.cwd) {
+        await this.sandboxInitPromise;
+        return;
+      }
+      await this.sandboxInitPromise.catch(() => {
+        /* allow the next workspace init attempt */
+      });
+      if (this.sandboxAdapter.initialized && this.sandboxAdapter.workspacePath === session.cwd) {
+        return;
+      }
     }
 
-    // Initialize sandbox with workspace
-    const initPromise = initializeSandbox({
+    const trackedPromise = this.sandboxAdapter.initialize({
       workspacePath: session.cwd,
       mainWindow: null, // Will show dialogs globally
-    }).then(() => {
-      /* void */
     });
-
-    this.sandboxInitPromises.set(session.cwd, initPromise);
+    this.sandboxInitPromise = trackedPromise;
+    this.sandboxInitWorkspace = session.cwd;
 
     try {
-      await initPromise;
+      await trackedPromise;
       log('[SessionManager] Sandbox initialized for workspace:', session.cwd);
       log('[SessionManager] Sandbox mode:', this.sandboxAdapter.mode);
     } catch (error) {
@@ -468,7 +469,10 @@ export class SessionManager {
       });
       // Continue anyway - sandbox adapter will fallback to native
     } finally {
-      this.sandboxInitPromises.delete(session.cwd);
+      if (this.sandboxInitPromise === trackedPromise) {
+        this.sandboxInitPromise = null;
+        this.sandboxInitWorkspace = null;
+      }
     }
   }
 

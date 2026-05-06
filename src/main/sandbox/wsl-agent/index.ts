@@ -14,7 +14,6 @@ import * as readline from 'readline';
 import * as fs from 'fs';
 import * as path from 'path';
 import { spawn } from 'child_process';
-import { isPathWithinRoot } from './path-containment';
 
 // Types
 interface JSONRPCRequest {
@@ -68,7 +67,7 @@ class SandboxAgent {
   }
 
   /**
-   * Validate that a path is within the workspace
+   * Normalize a host path while still resolving symlinks when the target exists.
    */
   private validatePath(targetPath: string): string {
     if (!this.workspacePath) {
@@ -76,58 +75,21 @@ class SandboxAgent {
     }
 
     const resolved = path.resolve(targetPath);
-
-    if (!isPathWithinRoot(resolved, this.workspacePath)) {
-      throw new Error(`Path is outside workspace: ${resolved}`);
-    }
-
-    // Resolve symlinks to prevent symlink escape attacks
-    let realPath: string;
     try {
-      realPath = fs.realpathSync(resolved);
+      return fs.existsSync(resolved) ? fs.realpathSync(resolved) : path.normalize(resolved);
     } catch (err: unknown) {
-      // ENOENT is acceptable for paths that don't exist yet (e.g. write targets)
-      // but we must still verify containment of the nearest existing ancestor
-      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-        let ancestor = resolved;
-        while (ancestor !== path.dirname(ancestor)) {
-          ancestor = path.dirname(ancestor);
-          try {
-            const realAncestor = fs.realpathSync(ancestor);
-            if (!isPathWithinRoot(realAncestor, this.workspacePath)) {
-              throw new Error(`Resolved ancestor path is outside workspace: ${realAncestor}`);
-            }
-            return resolved;
-          } catch (ancestorErr: unknown) {
-            if ((ancestorErr as NodeJS.ErrnoException).code !== 'ENOENT') {
-              throw ancestorErr;
-            }
-            // Keep walking up
-          }
-        }
-        return resolved;
-      }
-      throw err;
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+      return path.normalize(resolved);
     }
-
-    // Re-check containment after symlink resolution
-    if (!isPathWithinRoot(realPath, this.workspacePath)) {
-      throw new Error(`Resolved path is outside workspace: ${realPath}`);
-    }
-
-    return realPath;
   }
 
   /**
    * Validate command for dangerous patterns
    */
   private validateCommand(command: string, cwd: string): void {
-    // Validate cwd
-    this.validatePath(cwd);
-
-    // Block path traversal
-    if (command.includes('../') || command.includes('..\\')) {
-      throw new Error('Path traversal detected in command');
+    const normalizedCwd = this.validatePath(cwd);
+    if (!fs.existsSync(normalizedCwd)) {
+      throw new Error(`Working directory not found: ${cwd}`);
     }
 
     // Block dangerous patterns
@@ -145,28 +107,6 @@ class SandboxAgent {
     for (const pattern of dangerousPatterns) {
       if (pattern.test(command)) {
         throw new Error('Potentially dangerous command blocked');
-      }
-    }
-
-    // Extract and validate absolute paths in command
-    const pathMatches = command.match(/\/[\w/-]+/g) || [];
-    for (const p of pathMatches) {
-      // Skip system paths that are commonly used
-      if (
-        p.startsWith('/usr/') ||
-        p.startsWith('/bin/') ||
-        p.startsWith('/tmp/') ||
-        p.startsWith('/dev/null')
-      ) {
-        continue;
-      }
-
-      // Check if it's a path in /mnt/ (Windows paths)
-      if (p.startsWith('/mnt/')) {
-        const resolved = path.resolve(p);
-        if (!isPathWithinRoot(resolved, this.workspacePath)) {
-          throw new Error(`Command references path outside workspace: ${p}`);
-        }
       }
     }
   }

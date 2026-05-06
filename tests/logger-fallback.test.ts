@@ -12,13 +12,9 @@ function resolveExpectedFallbackUserDataDir(): string {
         : process.env.XDG_CONFIG_HOME || path.join(os.homedir(), '.config');
 
   const preferred = path.join(baseDir, 'qingyanxue-coding');
-  const legacy = path.join(baseDir, 'open-cowork');
 
   if (fs.existsSync(preferred)) {
     return preferred;
-  }
-  if (fs.existsSync(legacy)) {
-    return legacy;
   }
   return preferred;
 }
@@ -133,5 +129,4 @@ describe('logger fallback behavior', () => {
     consoleSpy.mockRestore();
     logger.closeLogFile();
   });
-
 });

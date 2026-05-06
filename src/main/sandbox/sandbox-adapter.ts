@@ -114,13 +114,33 @@ export class SandboxAdapter implements SandboxExecutor {
    * Initialize the sandbox adapter
    */
   async initialize(config: SandboxAdapterConfig): Promise<void> {
-    // Prevent multiple initializations
+    const sameWorkspace = this.state.workspacePath === config.workspacePath;
     if (this.initPromise) {
-      return this.initPromise;
+      if (sameWorkspace) {
+        return this.initPromise;
+      }
+      await this.initPromise.catch(() => {
+        /* allow re-init below */
+      });
     }
 
-    this.initPromise = this._initialize(config);
-    return this.initPromise;
+    if (this.state.initialized) {
+      if (sameWorkspace) {
+        this._config = config;
+        return;
+      }
+      await this.reinitialize(config);
+      return;
+    }
+
+    const initialization = this._initialize(config);
+    const trackedInitialization = initialization.finally(() => {
+      if (this.initPromise === trackedInitialization) {
+        this.initPromise = null;
+      }
+    });
+    this.initPromise = trackedInitialization;
+    return trackedInitialization;
   }
 
   private async _initialize(config: SandboxAdapterConfig): Promise<void> {
@@ -607,6 +627,7 @@ export class SandboxAdapter implements SandboxExecutor {
 
     this.state.initialized = false;
     this.state.mode = 'none';
+    this.state.workspacePath = '';
     this.initPromise = null;
     log('[SandboxAdapter] Shutdown complete');
   }

@@ -95,6 +95,14 @@ if (userDataOverride) {
   process.env.QINGYANXUE_CODING_USER_DATA_DIR = userDataOverride;
   process.env.OPEN_COWORK_USER_DATA_DIR = userDataOverride;
   log('[App] Using isolated userData override:', userDataOverride);
+} else {
+  const preferredUserDataPath = getOpenCoworkAppDataDir();
+  const currentUserDataPath = app.getPath('userData');
+  if (preferredUserDataPath && resolve(currentUserDataPath) !== resolve(preferredUserDataPath)) {
+    fs.mkdirSync(preferredUserDataPath, { recursive: true });
+    app.setPath('userData', preferredUserDataPath);
+    log('[App] Using preferred userData path:', preferredUserDataPath);
+  }
 }
 
 // Load .env file from project root (for development)
@@ -842,9 +850,13 @@ app
     log('===========================');
 
     const preflightIssues = runPreflight();
-    const criticalPreflightIssues = preflightIssues.filter((issue) => issue.severity === 'critical');
+    const criticalPreflightIssues = preflightIssues.filter(
+      (issue) => issue.severity === 'critical'
+    );
     if (criticalPreflightIssues.length > 0) {
-      const detail = criticalPreflightIssues.map((issue) => `- ${issue.resource}: ${issue.message}`).join('\n');
+      const detail = criticalPreflightIssues
+        .map((issue) => `- ${issue.resource}: ${issue.message}`)
+        .join('\n');
       dialog.showErrorBox('清砚雪Coding 资源缺失', `检测到关键运行资源缺失：\n${detail}`);
       app.quit();
       return;

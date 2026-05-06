@@ -49,7 +49,7 @@ function formatCtxPrefix(): string {
 let logFilePath: string | null = null;
 let logStream: fs.WriteStream | null = null;
 const MAX_LOG_SIZE = 10 * 1024 * 1024; // 10MB
-const MAX_LOG_FILES = 5; // Keep last 5 log files
+const MAX_LOG_RETENTION_MS = 24 * 60 * 60 * 1000; // Keep logs for 24 hours
 let logFileSequence = 0;
 /** Number of log entries written since last rotation check. */
 let logWriteCounter = 0;
@@ -139,7 +139,7 @@ App Version: ${resolveAppVersion()}
 
     safeConsoleLog(`[Logger] Log file initialized: ${logFilePath}`);
 
-    // Cleanup old log files
+    // Cleanup expired log files
     cleanupOldLogs(logsDir);
   } catch (error) {
     safeConsoleError('[Logger] Failed to initialize log file:', error);
@@ -147,10 +147,12 @@ App Version: ${resolveAppVersion()}
 }
 
 /**
- * Cleanup old log files, keep only MAX_LOG_FILES
+ * Cleanup log files older than the rolling retention window.
  */
 function cleanupOldLogs(logsDir: string): void {
   try {
+    const now = Date.now();
+    const expiryCutoff = now - MAX_LOG_RETENTION_MS;
     const files = fs
       .readdirSync(logsDir)
       .filter((f) => f.startsWith('app-') && f.endsWith('.log'))
@@ -175,24 +177,22 @@ function cleanupOldLogs(logsDir: string): void {
       })
       .sort((a, b) => b.mtime - a.mtime); // Sort by modification time, newest first
 
-    // Delete old files
-    if (files.length > MAX_LOG_FILES) {
-      const activeLogFilePath = logFilePath;
-      const filesToDelete = files
-        .slice(MAX_LOG_FILES)
-        .filter((file) => !activeLogFilePath || file.path !== activeLogFilePath);
-      for (const file of filesToDelete) {
-        try {
-          fs.unlinkSync(file.path);
-          safeConsoleLog(`[Logger] Deleted old log file: ${file.name}`);
-        } catch (err) {
-          const errno = err as NodeJS.ErrnoException;
-          if (errno.code === 'ENOENT') {
-            // File already removed by another process/test; ignore.
-            continue;
-          }
-          safeConsoleError(`[Logger] Failed to delete log file ${file.name}:`, err);
+    const activeLogFilePath = logFilePath;
+    const filesToDelete = files.filter(
+      (file) => file.mtime < expiryCutoff && (!activeLogFilePath || file.path !== activeLogFilePath)
+    );
+
+    for (const file of filesToDelete) {
+      try {
+        fs.unlinkSync(file.path);
+        safeConsoleLog(`[Logger] Deleted expired log file: ${file.name}`);
+      } catch (err) {
+        const errno = err as NodeJS.ErrnoException;
+        if (errno.code === 'ENOENT') {
+          // File already removed by another process/test; ignore.
+          continue;
         }
+        safeConsoleError(`[Logger] Failed to delete log file ${file.name}:`, err);
       }
     }
   } catch (error) {
@@ -207,9 +207,17 @@ function rotateLogIfNeeded(): void {
   if (!logFilePath || !logStream) return;
 
   try {
+    const logsDir = path.dirname(logFilePath);
     const stats = fs.statSync(logFilePath);
-    if (stats.size > MAX_LOG_SIZE) {
-      safeConsoleLog(`[Logger] Log file size (${stats.size}) exceeds limit, rotating...`);
+    const logAgeMs = Date.now() - stats.mtime.getTime();
+    const shouldRotateForSize = stats.size > MAX_LOG_SIZE;
+    const shouldRotateForAge = logAgeMs > MAX_LOG_RETENTION_MS;
+
+    if (shouldRotateForSize || shouldRotateForAge) {
+      const reason = shouldRotateForSize
+        ? `size (${stats.size}) exceeds limit`
+        : `age (${Math.floor(logAgeMs / 1000)}s) exceeds 24h retention`;
+      safeConsoleLog(`[Logger] Log file ${reason}, rotating...`);
 
       // Close current stream
       logStream.end();
@@ -217,6 +225,8 @@ function rotateLogIfNeeded(): void {
       // Reset and reinitialize
       clearLogStreamState();
       initLogFile();
+    } else {
+      cleanupOldLogs(logsDir);
     }
   } catch (error) {
     const errno = error as NodeJS.ErrnoException;

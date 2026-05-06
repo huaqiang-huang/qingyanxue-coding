@@ -11,6 +11,7 @@ import type { ToolUseContent, ToolResultContent, ContentBlock, Message } from '.
 import { AskUserQuestionBlock } from './AskUserQuestionBlock';
 import { TodoWriteBlock } from './TodoWriteBlock';
 import { getToolIcon, getToolLabel } from './toolHelpers';
+import { deriveToolUseState } from '../../utils/tool-use-state';
 
 // Only allow safe image MIME types for data: URI rendering
 const ALLOWED_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp']);
@@ -63,12 +64,13 @@ export const ToolUseBlock = memo(function ToolUseBlock({
     }
   }
 
-  // Determine state: running / success / error
-  // Only show spinner if session still has an active turn; otherwise treat as done
   const hasActiveTurn = Boolean(activeTurn);
-  const isRunning = !toolResult && hasActiveTurn;
-  const isError = toolResult?.isError === true;
-  const isSuccess = toolResult && !isError;
+  const { isRunning, isError, isSuccess, duration } = deriveToolUseState(
+    block.id,
+    traceSteps,
+    hasActiveTurn,
+    toolResult
+  );
 
   const label = getToolLabel(block.name, block.input);
   const isMCPTool = block.name.startsWith('mcp__');
@@ -108,13 +110,6 @@ export const ToolUseBlock = memo(function ToolUseBlock({
         isError
       )
     : false;
-
-  // Duration from trace steps
-  let duration: number | undefined;
-  if (message?.sessionId) {
-    const resultStep = traceSteps.find((s) => s.id === block.id && s.type === 'tool_result');
-    duration = resultStep?.duration;
-  }
 
   return (
     <div

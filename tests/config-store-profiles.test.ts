@@ -145,6 +145,24 @@ describe('ConfigStore provider profiles', () => {
     expect(openrouterView.model).toBe('anthropic/claude-sonnet-4');
   });
 
+  it('preserves active profile context window overrides', () => {
+    const store = new ConfigStore();
+
+    store.update({ provider: 'openrouter' });
+    store.update({
+      apiKey: 'sk-or-new',
+      model: 'gpt-5.4',
+      contextWindow: 256000,
+      maxTokens: 16000,
+    });
+
+    const config = store.getAll();
+    expect(config.contextWindow).toBe(256000);
+    expect(config.maxTokens).toBe(16000);
+    expect(config.profiles.openrouter?.contextWindow).toBe(256000);
+    expect(config.profiles.openrouter?.maxTokens).toBe(16000);
+  });
+
   it('keeps gemini and custom gemini profiles isolated from other providers', () => {
     const store = new ConfigStore();
 

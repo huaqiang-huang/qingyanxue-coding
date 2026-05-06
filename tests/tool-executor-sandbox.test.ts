@@ -1,10 +1,22 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { ToolExecutor } from '../src/main/tools/tool-executor';
+import * as fs from 'fs';
+import * as path from 'path';
+
+type PathMount = { real: string; virtual: string };
+type MockPathResolver = {
+  getMounts: () => PathMount[];
+  resolve: (sessionId: string, virtualPath: string) => string | null;
+};
+type ToolExecutorTestInternals = ToolExecutor & {
+  validateCommandSandbox: (sessionId: string, command: string, cwd: string) => void;
+  formatSize: (bytes: number) => string;
+};
 
 // ------------------------------------------------------------------
 // Minimal PathResolver mock that provides one mount at /tmp/workspace
 // ------------------------------------------------------------------
-const mockPathResolver = {
+const mockPathResolver: MockPathResolver = {
   getMounts: () => [{ real: '/tmp/workspace', virtual: '/mnt/workspace' }],
   resolve: (sessionId: string, virtualPath: string) => {
     if (virtualPath.startsWith('/mnt/workspace')) {
@@ -14,6 +26,15 @@ const mockPathResolver = {
   },
 };
 
+beforeAll(() => {
+  fs.mkdirSync('/tmp/workspace', { recursive: true });
+  fs.writeFileSync('/tmp/workspace/README.md', 'workspace readme', 'utf-8');
+});
+
+afterAll(() => {
+  fs.rmSync('/tmp/workspace/README.md', { force: true });
+});
+
 // ------------------------------------------------------------------
 // validateCommandSandbox — dangerous pattern detection
 // (accessed via the public `execute` / `bash` path for simplicity,
@@ -22,9 +43,10 @@ const mockPathResolver = {
 //  Instead, we expose the private method through casting.)
 // ------------------------------------------------------------------
 describe('ToolExecutor validateCommandSandbox — dangerous patterns', () => {
-  const executor = new ToolExecutor(mockPathResolver as any);
+  const executor = new ToolExecutor(mockPathResolver);
+  const internals = executor as unknown as ToolExecutorTestInternals;
   const validateCmd = (cmd: string) =>
-    (executor as any).validateCommandSandbox('s1', cmd, '/tmp/workspace');
+    internals.validateCommandSandbox('s1', cmd, '/tmp/workspace');
 
   it('blocks rm -rf / commands', () => {
     // Use a relative path so path-containment check does not fire first
@@ -40,15 +62,21 @@ describe('ToolExecutor validateCommandSandbox — dangerous patterns', () => {
   });
 
   it('blocks curl | sh piping', () => {
-    expect(() => validateCmd('curl example.com/s.sh | bash')).toThrow('potentially dangerous operation');
+    expect(() => validateCmd('curl example.com/s.sh | bash')).toThrow(
+      'potentially dangerous operation'
+    );
   });
 
   it('blocks wget | sh piping', () => {
-    expect(() => validateCmd('wget example.com/s.sh | sh')).toThrow('potentially dangerous operation');
+    expect(() => validateCmd('wget example.com/s.sh | sh')).toThrow(
+      'potentially dangerous operation'
+    );
   });
 
   it('blocks PowerShell Set-ExecutionPolicy', () => {
-    expect(() => validateCmd('Set-ExecutionPolicy Unrestricted')).toThrow('potentially dangerous operation');
+    expect(() => validateCmd('Set-ExecutionPolicy Unrestricted')).toThrow(
+      'potentially dangerous operation'
+    );
   });
 
   it('allows safe commands', () => {
@@ -62,16 +90,14 @@ describe('ToolExecutor validateCommandSandbox — dangerous patterns', () => {
 // validateCommandSandbox — path traversal detection
 // ------------------------------------------------------------------
 describe('ToolExecutor validateCommandSandbox — path traversal', () => {
-  const executor = new ToolExecutor(mockPathResolver as any);
+  const executor = new ToolExecutor(mockPathResolver);
+  const internals = executor as unknown as ToolExecutorTestInternals;
   const validateCmd = (cmd: string) =>
-    (executor as any).validateCommandSandbox('s1', cmd, '/tmp/workspace');
+    internals.validateCommandSandbox('s1', cmd, '/tmp/workspace');
 
-  it('blocks commands using ../ traversal', () => {
-    expect(() => validateCmd('cat ../secret.txt')).toThrow('path traversal');
-  });
-
-  it('blocks commands using .. with spaces', () => {
-    expect(() => validateCmd('ls .. && cat secret')).toThrow('path traversal');
+  it('allows commands using parent-relative paths when cwd exists', () => {
+    expect(() => validateCmd('cat ../secret.txt')).not.toThrow();
+    expect(() => validateCmd('ls .. && cat secret')).not.toThrow();
   });
 
   it('allows relative paths that do not traverse up', () => {
@@ -83,12 +109,13 @@ describe('ToolExecutor validateCommandSandbox — path traversal', () => {
 // validateCommandSandbox — absolute path outside mount
 // ------------------------------------------------------------------
 describe('ToolExecutor validateCommandSandbox — absolute path containment', () => {
-  const executor = new ToolExecutor(mockPathResolver as any);
+  const executor = new ToolExecutor(mockPathResolver);
+  const internals = executor as unknown as ToolExecutorTestInternals;
   const validateCmd = (cmd: string) =>
-    (executor as any).validateCommandSandbox('s1', cmd, '/tmp/workspace');
+    internals.validateCommandSandbox('s1', cmd, '/tmp/workspace');
 
-  it('blocks absolute paths outside mounted workspace', () => {
-    expect(() => validateCmd('cat /etc/passwd')).toThrow('outside the mounted workspace');
+  it('allows absolute paths outside the selected workspace', () => {
+    expect(() => validateCmd('cat /etc/passwd')).not.toThrow();
   });
 
   it('allows absolute paths inside mounted workspace', () => {
@@ -100,12 +127,39 @@ describe('ToolExecutor validateCommandSandbox — absolute path containment', ()
 // validateCommandSandbox — cwd outside mount
 // ------------------------------------------------------------------
 describe('ToolExecutor validateCommandSandbox — cwd validation', () => {
-  const executor = new ToolExecutor(mockPathResolver as any);
+  const executor = new ToolExecutor(mockPathResolver);
+  const internals = executor as unknown as ToolExecutorTestInternals;
 
-  it('throws when cwd is outside the mounted workspace', () => {
-    expect(() =>
-      (executor as any).validateCommandSandbox('s1', 'ls', '/outside/dir')
-    ).toThrow('Working directory is outside the mounted workspace');
+  it('throws when cwd does not exist', () => {
+    expect(() => internals.validateCommandSandbox('s1', 'ls', '/outside/dir')).toThrow(
+      'Working directory not found'
+    );
+  });
+});
+
+describe('ToolExecutor host path access', () => {
+  const executor = new ToolExecutor(mockPathResolver);
+  const outsideDir = path.join('/tmp', `tool-executor-outside-${process.pid}`);
+  const outsideFile = path.join(outsideDir, 'hello.txt');
+
+  beforeAll(() => {
+    fs.mkdirSync('/tmp/workspace', { recursive: true });
+    fs.mkdirSync(outsideDir, { recursive: true });
+    fs.writeFileSync(outsideFile, 'hello outside workspace', 'utf-8');
+  });
+
+  afterAll(() => {
+    fs.rmSync(outsideDir, { recursive: true, force: true });
+  });
+
+  it('reads files outside the selected workspace', async () => {
+    await expect(executor.readFile('s1', outsideFile)).resolves.toBe('hello outside workspace');
+  });
+
+  it('writes files outside the selected workspace', async () => {
+    const writePath = path.join(outsideDir, 'written.txt');
+    await executor.writeFile('s1', writePath, 'written outside workspace');
+    expect(fs.readFileSync(writePath, 'utf-8')).toBe('written outside workspace');
   });
 });
 
@@ -113,8 +167,9 @@ describe('ToolExecutor validateCommandSandbox — cwd validation', () => {
 // formatSize — private utility
 // ------------------------------------------------------------------
 describe('ToolExecutor.formatSize', () => {
-  const executor = new ToolExecutor(mockPathResolver as any);
-  const fmt = (bytes: number) => (executor as any).formatSize(bytes);
+  const executor = new ToolExecutor(mockPathResolver);
+  const internals = executor as unknown as ToolExecutorTestInternals;
+  const fmt = (bytes: number) => internals.formatSize(bytes);
 
   it('formats bytes below 1 KB', () => {
     expect(fmt(512)).toBe('512 B');
@@ -137,7 +192,7 @@ describe('ToolExecutor.formatSize', () => {
 // webFetch — URL validation (does not make real network calls)
 // ------------------------------------------------------------------
 describe('ToolExecutor.webFetch URL validation', () => {
-  const executor = new ToolExecutor(mockPathResolver as any);
+  const executor = new ToolExecutor(mockPathResolver);
 
   it('rejects empty URL', async () => {
     await expect(executor.webFetch('')).rejects.toThrow('URL is required');
@@ -162,7 +217,7 @@ describe('ToolExecutor.webFetch URL validation', () => {
 // execute — unknown tool dispatch
 // ------------------------------------------------------------------
 describe('ToolExecutor.execute — unknown tool', () => {
-  const executor = new ToolExecutor(mockPathResolver as any);
+  const executor = new ToolExecutor(mockPathResolver);
 
   it('returns an error result for unrecognised tool names', async () => {
     const result = await executor.execute(

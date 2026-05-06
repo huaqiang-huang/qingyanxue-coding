@@ -53,6 +53,11 @@ export interface MCPTool {
   serverName: string;
 }
 
+const MCP_TOOL_TIMEOUT_MS = 30000;
+const MCP_TOOL_TIMEOUT_GRACE_MS = 1500;
+const MCP_TOOL_RETRYABLE_ATTEMPTS = 2;
+const MCP_TOOL_TIMEOUT_RETRY_ATTEMPTS = 1;
+
 function normalizeWindowsPathForComparison(candidate: string): string {
   return path.win32.normalize(candidate).replace(/\//g, '\\').toLowerCase();
 }
@@ -145,6 +150,7 @@ export class MCPManager {
   private reconnectingServers: Set<string> = new Set();
   // Tracks per-server connection status for UI display
   private connectionStatus = new Map<string, 'connecting' | 'connected' | 'failed'>();
+  private timedOutCalls = new Map<string, number>();
 
   /**
    * Get bundled Node.js path
@@ -1440,11 +1446,11 @@ export class MCPManager {
     logCtx(`[MCPManager] Calling tool ${actualToolName} on server ${tool.serverName}`);
 
     const callStartTime = Date.now();
-    const maxRetries = 2;
     let lastError: unknown;
     let compatHotReloadTried = false;
+    let timeoutRetryUsed = false;
 
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    for (let attempt = 0; attempt <= MCP_TOOL_RETRYABLE_ATTEMPTS; attempt++) {
       // Re-lookup tool on every iteration: after reconnect the registry is refreshed
       const currentTool = this.tools.get(toolName) ?? tool;
       try {
@@ -1453,26 +1459,25 @@ export class MCPManager {
           throw new Error(`MCP server not connected: ${currentTool.serverId}`);
         }
 
-        // Add timeout for tool call
-        const timeoutMs = 30000; // 30 second timeout
+        const serverCallKey = `${currentTool.serverId}:${actualToolName}`;
         const callPromise = client.callTool({
           name: actualToolName,
           arguments: args,
         });
-        let callTimeoutId: ReturnType<typeof setTimeout>;
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          callTimeoutId = setTimeout(
-            () => reject(new Error(`Tool call timeout after ${timeoutMs}ms`)),
-            timeoutMs
-          );
-        });
 
-        let result;
-        try {
-          result = await Promise.race([callPromise, timeoutPromise]);
-        } finally {
-          clearTimeout(callTimeoutId!);
+        const timedResult = await this.awaitToolCallWithTimeout(
+          currentTool.serverId,
+          serverCallKey,
+          callPromise
+        );
+        if (timedResult.timedOut) {
+          const timeoutError = new Error(
+            `Tool call timeout after ${MCP_TOOL_TIMEOUT_MS}ms (${currentTool.serverName}/${actualToolName})`
+          );
+          (timeoutError as Error & { code?: string }).code = 'MCP_TOOL_TIMEOUT';
+          throw timeoutError;
         }
+        const result = timedResult.result;
 
         const toolErrorMessage = extractStructuredToolErrorMessage(result);
         if (shouldReconnectOnStructuredToolError(toolErrorMessage)) {
@@ -1498,12 +1503,13 @@ export class MCPManager {
       } catch (error: unknown) {
         lastError = error;
         const errorMsg = error instanceof Error ? error.message : String(error);
+        const errorCode = (error as Error & { code?: string }).code;
         logCtxError(
-          `[MCPManager] Error calling tool ${toolName} (attempt ${attempt + 1}/${maxRetries + 1}):`,
+          `[MCPManager] Error calling tool ${toolName} (attempt ${attempt + 1}/${MCP_TOOL_RETRYABLE_ATTEMPTS + 1}):`,
           errorMsg
         );
 
-        if (attempt >= maxRetries) {
+        if (attempt >= MCP_TOOL_RETRYABLE_ATTEMPTS) {
           break;
         }
 
@@ -1529,10 +1535,19 @@ export class MCPManager {
           continue;
         }
 
-        if (errorMsg.includes('timeout')) {
-          log(`[MCPManager] Tool call timeout detected, retrying after backoff...`);
-          const delay = Math.min(2000 * Math.pow(1.5, attempt), 10000);
-          await new Promise((resolve) => setTimeout(resolve, delay));
+        if (
+          errorCode === 'MCP_TOOL_TIMEOUT' ||
+          lowerErrorMsg.includes('tool call timeout') ||
+          lowerErrorMsg.includes('timeout after')
+        ) {
+          if (timeoutRetryUsed || attempt >= MCP_TOOL_TIMEOUT_RETRY_ATTEMPTS) {
+            break;
+          }
+          timeoutRetryUsed = true;
+          logWarn(
+            `[MCPManager] Tool call timeout detected for ${currentTool.serverName}/${actualToolName}; reconnecting before a single retry.`
+          );
+          await this.reconnectServer(currentTool.serverId);
           continue;
         }
 
@@ -1573,6 +1588,57 @@ export class MCPManager {
     } finally {
       this.reconnectingServers.delete(serverId);
     }
+  }
+
+  private async awaitToolCallWithTimeout(
+    serverId: string,
+    callKey: string,
+    callPromise: Promise<unknown>
+  ): Promise<{ timedOut: false; result: unknown } | { timedOut: true }> {
+    let callTimeoutId: ReturnType<typeof setTimeout>;
+    const timeoutPromise = new Promise<'__timeout__'>((resolve) => {
+      callTimeoutId = setTimeout(() => resolve('__timeout__'), MCP_TOOL_TIMEOUT_MS);
+    });
+
+    const raced = await Promise.race([callPromise, timeoutPromise]);
+    clearTimeout(callTimeoutId!);
+    if (raced !== '__timeout__') {
+      return { timedOut: false, result: raced };
+    }
+
+    const nextTimeoutCount = (this.timedOutCalls.get(callKey) || 0) + 1;
+    this.timedOutCalls.set(callKey, nextTimeoutCount);
+    void callPromise
+      .then((lateResult) => {
+        if (this.timedOutCalls.get(callKey) !== nextTimeoutCount) {
+          return;
+        }
+        logWarn(
+          `[MCPManager] Ignoring late MCP tool result after timeout for ${callKey}: ${truncateForLog(
+            safeStringifyForLog(lateResult)
+          )}`
+        );
+      })
+      .catch((lateError) => {
+        if (this.timedOutCalls.get(callKey) !== nextTimeoutCount) {
+          return;
+        }
+        logWarn(
+          `[MCPManager] Late MCP tool failure after timeout for ${callKey}: ${
+            lateError instanceof Error ? lateError.message : String(lateError)
+          }`
+        );
+      })
+      .finally(() => {
+        setTimeout(() => {
+          if (this.timedOutCalls.get(callKey) === nextTimeoutCount) {
+            this.timedOutCalls.delete(callKey);
+          }
+        }, MCP_TOOL_TIMEOUT_GRACE_MS);
+      });
+
+    this.connectionStatus.set(serverId, 'failed');
+    return { timedOut: true };
   }
 
   /**
@@ -1744,4 +1810,16 @@ function shouldHotReloadGuiVisionServer(
     errorMessage.includes('Instructions are required') ||
     errorMessage.includes('Stream must be set to true')
   );
+}
+
+function safeStringifyForLog(value: unknown): string {
+  try {
+    return typeof value === 'string' ? value : JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function truncateForLog(text: string, maxLength = 240): string {
+  return text.length > maxLength ? `${text.slice(0, maxLength - 3)}...` : text;
 }

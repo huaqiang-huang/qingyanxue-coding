@@ -2,6 +2,10 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 
+const PROJECT_URL = 'https://github.com/huaqiang-huang/qingyanxue-coding';
+const RELEASES_URL = `${PROJECT_URL}/releases`;
+const ISSUES_URL = `${PROJECT_URL}/issues`;
+
 export function SettingsGeneral() {
   const { i18n, t } = useTranslation();
   const settings = useAppStore((s) => s.settings);
@@ -28,6 +32,16 @@ export function SettingsGeneral() {
     { value: 'dark' as const, label: t('general.themeDark') },
     { value: 'system' as const, label: t('general.themeSystem', 'System') },
   ];
+
+  const openExternal = (url: string) => {
+    try {
+      if (window.electronAPI?.openExternal) {
+        void window.electronAPI.openExternal(url);
+      }
+    } catch {
+      /* ignore */
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -73,8 +87,28 @@ export function SettingsGeneral() {
 
       {/* About */}
       {appVer && (
-        <div className="pt-4 border-t border-border">
+        <div className="pt-4 border-t border-border space-y-3">
           <p className="text-xs text-text-muted">清砚雪Coding v{appVer}</p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => openExternal(PROJECT_URL)}
+              className="px-3 py-1.5 rounded-lg border border-border bg-surface hover:border-accent/50 text-xs text-text-secondary hover:text-text-primary transition-colors"
+            >
+              GitHub
+            </button>
+            <button
+              onClick={() => openExternal(RELEASES_URL)}
+              className="px-3 py-1.5 rounded-lg border border-border bg-surface hover:border-accent/50 text-xs text-text-secondary hover:text-text-primary transition-colors"
+            >
+              Releases
+            </button>
+            <button
+              onClick={() => openExternal(ISSUES_URL)}
+              className="px-3 py-1.5 rounded-lg border border-border bg-surface hover:border-accent/50 text-xs text-text-secondary hover:text-text-primary transition-colors"
+            >
+              Issues
+            </button>
+          </div>
         </div>
       )}
     </div>
